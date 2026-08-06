@@ -290,6 +290,30 @@
     showMessage('Параметры сохранены локально в браузере.');
   }
 
+  function resetToBlank() {
+    el('apartments').innerHTML = '';
+    el('results').innerHTML = '';
+    el('summary').innerHTML = '';
+    el('projectName').value = '';
+    el('material').value = '';
+    el('rollWidths').value = '2, 2.5, 3, 3.5, 4, 5';
+    el('allowance').value = '10';
+    el('mode').value = 'seams';
+    ['filterApartment','filterRoom','filterWidth'].forEach(id => {
+      el(id).innerHTML = '<option value="">Все</option>';
+    });
+    window.__linumLastCalc = null;
+    createApartment();
+  }
+
+  function clearAll() {
+    const ok = window.confirm('Удалить все данные проекта (квартиры, помещения, результаты) и начать заполнение с нуля? Сохранённые ранее параметры в браузере также будут удалены.');
+    if (!ok) return;
+    localStorage.removeItem(STORAGE_KEY);
+    resetToBlank();
+    showMessage('Все данные очищены. Можете начинать заполнение снова.', false);
+  }
+
   function loadProject() {
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
@@ -354,6 +378,7 @@
     el('addApartment').addEventListener('click', createApartment);
     el('calculate').addEventListener('click', calculate);
     el('saveProject').addEventListener('click', saveProject);
+    el('clearAll').addEventListener('click', clearAll);
     el('downloadCsv').addEventListener('click', downloadCsv);
     el('exportSheets').addEventListener('click', exportSheets);
     el('printBtn').addEventListener('click', () => window.print());
