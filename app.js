@@ -10,8 +10,7 @@
   ];
 
   const STORAGE_KEY = 'linum_project_v1';
-  // вставьте сюда URL веб-аппа Google Apps Script (см. google-apps-script/Code.gs)
-  const APPS_SCRIPT_URL = '';
+  const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzDgb9kcSqO75OzhMGxktfUQroonmLS8NIDCfTphROe0W02Aln3MBzTTV6iQZWRx5Np/exec';
 
   const el = id => document.getElementById(id);
   const parseNum = v => {
