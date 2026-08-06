@@ -35,6 +35,18 @@
 
   <section class="card">
     <div class="section-head">
+      <h2>Архив расчётов (Google таблица)</h2>
+      <button id="refreshArchive" class="secondary">↓ Обновить список</button>
+    </div>
+    <div class="filters">
+      <select id="archiveSelect"><option value="">Архив не загружен</option></select>
+      <button id="loadArchive" class="primary">Загрузить выбранный расчёт</button>
+    </div>
+    <small>Сохранённые расчёты хранятся в Google таблице после нажатия «Выгрузить в Google таблицы» в конце страницы. Выберите дату из списка, чтобы вернуть старый расчёт для редактирования.</small>
+  </section>
+
+  <section class="card">
+    <div class="section-head">
       <h2>Квартиры и помещения</h2>
       <button id="addApartment">+ Добавить квартиру</button>
     </div>
@@ -130,6 +142,6 @@
   </div>
 </template>
 
-<script src="app.js?v=20260806-clearall"></script>
+<script src="app.js?v=20260806-archive"></script>
 </body>
 </html>

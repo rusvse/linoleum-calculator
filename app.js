@@ -10,6 +10,8 @@
   ];
 
   const STORAGE_KEY = 'linum_project_v1';
+  // вставьте сюда URL веб-аппа Google Apps Script (см. google-apps-script/Code.gs)
+  const APPS_SCRIPT_URL = '';
 
   const el = id => document.getElementById(id);
   const parseNum = v => {
@@ -182,6 +184,7 @@
     const aptSet = new Set(), roomSet = new Set(), widthSet = new Set();
 
     const summaryMap = new Map();
+    const flatRows = [];
     let markingCounter = 1;
 
     apartments.forEach(apt => {
@@ -221,6 +224,13 @@
         s.totalArea += calc.usedArea;
         s.apartments.add(apt.name);
         s.markings.push(marking);
+
+        flatRows.push({
+          marking, apartment: apt.name, room: room.typeName + (room.code ? ' ('+room.code+')' : ''),
+          size: roomSizeText, rollWidth: calc.rollWidth, length: calc.cutLength,
+          area: calc.usedArea, waste: calc.waste, seams: calc.seams || 0,
+          comment: room.comment || apt.comment || ''
+        });
       });
     });
 
@@ -250,7 +260,7 @@
     fillSelect(filterRoom, roomSet);
     fillSelect(filterWidth, [...widthSet].map(fmt));
 
-    window.__linumLastCalc = { apartments, settings, summaryMap };
+    window.__linumLastCalc = { apartments, settings, summaryMap, rows: flatRows };
   }
 
   function readSettings() {
@@ -314,40 +324,45 @@
     showMessage('Все данные очищены. Можете начинать заполнение снова.', false);
   }
 
+  function loadProjectFromData(data) {
+    el('apartments').innerHTML = '';
+    el('projectName').value = data.settings?.projectName || '';
+    el('material').value = data.settings?.material || '';
+    if (data.settings?.rollWidths?.length) el('rollWidths').value = data.settings.rollWidths.join(', ');
+    if (data.settings?.allowanceM !== undefined) el('allowance').value = Math.round(data.settings.allowanceM * 100);
+    if (data.settings?.mode) el('mode').value = data.settings.mode;
+
+    if (data.apartments?.length) {
+      data.apartments.forEach(apt => {
+        const aptEl = createApartment();
+        aptEl.querySelectorAll('.room').forEach(r => r.remove());
+        aptEl.querySelector('.apt-number').value = apt.number || '';
+        aptEl.querySelector('.apt-name').value = apt.name || '';
+        aptEl.querySelector('.apt-comment').value = apt.comment || '';
+        const roomsContainer = aptEl.querySelector('.rooms');
+        apt.rooms.forEach(room => {
+          const r = createRoom(roomsContainer);
+          const typeMatch = ROOM_TYPES.find(t => t.name === room.typeName);
+          r.querySelector('.room-type').value = typeMatch ? typeMatch.code : 'custom';
+          r.querySelector('.room-type').dispatchEvent(new Event('change'));
+          if (!typeMatch) r.querySelector('.room-custom').value = room.typeName;
+          r.querySelector('.room-code').value = room.code || '';
+          r.querySelector('.room-length').value = room.length;
+          r.querySelector('.room-width').value = room.width;
+          r.querySelector('.room-comment').value = room.comment || '';
+        });
+      });
+    } else {
+      createApartment();
+    }
+  }
+
   function loadProject() {
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
       if (!raw) { createApartment(); return; }
       const data = JSON.parse(raw);
-      el('projectName').value = data.settings?.projectName || '';
-      el('material').value = data.settings?.material || '';
-      if (data.settings?.rollWidths?.length) el('rollWidths').value = data.settings.rollWidths.join(', ');
-      if (data.settings?.allowanceM !== undefined) el('allowance').value = Math.round(data.settings.allowanceM * 100);
-      if (data.settings?.mode) el('mode').value = data.settings.mode;
-
-      if (data.apartments?.length) {
-        data.apartments.forEach(apt => {
-          const aptEl = createApartment();
-          aptEl.querySelectorAll('.room').forEach(r => r.remove());
-          aptEl.querySelector('.apt-number').value = apt.number || '';
-          aptEl.querySelector('.apt-name').value = apt.name || '';
-          aptEl.querySelector('.apt-comment').value = apt.comment || '';
-          const roomsContainer = aptEl.querySelector('.rooms');
-          apt.rooms.forEach(room => {
-            const r = createRoom(roomsContainer);
-            const typeMatch = ROOM_TYPES.find(t => t.name === room.typeName);
-            r.querySelector('.room-type').value = typeMatch ? typeMatch.code : 'custom';
-            r.querySelector('.room-type').dispatchEvent(new Event('change'));
-            if (!typeMatch) r.querySelector('.room-custom').value = room.typeName;
-            r.querySelector('.room-code').value = room.code || '';
-            r.querySelector('.room-length').value = room.length;
-            r.querySelector('.room-width').value = room.width;
-            r.querySelector('.room-comment').value = room.comment || '';
-          });
-        });
-      } else {
-        createApartment();
-      }
+      loadProjectFromData(data);
     } catch (e) {
       createApartment();
     }
@@ -368,10 +383,83 @@
     link.click();
   }
 
-  function exportSheets() {
+  function isAppsScriptConfigured() {
+    return !!APPS_SCRIPT_URL && APPS_SCRIPT_URL.indexOf('https://') === 0;
+  }
+
+  async function exportSheets() {
     const last = window.__linumLastCalc;
     if (!last) { showMessage('Сначала выполните расчёт.', true); return; }
-    showMessage('Функция экспорта в Google таблицы требует подключения скрипта (см. google-apps-script/Code.gs).', false);
+    if (!isAppsScriptConfigured()) {
+      showMessage('Функция экспорта в Google таблицы требует подключения скрипта (см. google-apps-script/Code.gs и README).', true);
+      return;
+    }
+    const id = 'linum-' + Date.now();
+    const dateISO = new Date().toISOString();
+    const payload = {
+      id, dateISO,
+      settings: last.settings,
+      apartments: collectData(),
+      rows: last.rows
+    };
+    showMessage('Сохраняется в Google таблицу…', false);
+    try {
+      const resp = await fetch(APPS_SCRIPT_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify(payload)
+      });
+      const data = await resp.json();
+      if (data.ok) {
+        showMessage('Сохранено в архив (' + new Date(data.dateISO).toLocaleString('ru-RU') + ').', false);
+        refreshArchiveList();
+      } else {
+        showMessage('Ошибка сохранения: ' + (data.error || 'неизвестная ошибка'), true);
+      }
+    } catch (err) {
+      showMessage('Не удалось связаться с Google таблицей. Проверьте адрес и настройки доступа веб-аппа.', true);
+    }
+  }
+
+  async function refreshArchiveList() {
+    const select = el('archiveSelect');
+    if (!select) return;
+    if (!isAppsScriptConfigured()) {
+      select.innerHTML = '<option value="">Архив не настроен</option>';
+      return;
+    }
+    select.innerHTML = '<option value="">Загрузка…</option>';
+    try {
+      const resp = await fetch(APPS_SCRIPT_URL + '?action=list');
+      const data = await resp.json();
+      if (!data.ok) { select.innerHTML = '<option value="">Ошибка загрузки</option>'; return; }
+      if (!data.items.length) { select.innerHTML = '<option value="">Архив пуст</option>'; return; }
+      select.innerHTML = '';
+      data.items.forEach(item => {
+        const opt = document.createElement('option');
+        opt.value = item.id;
+        const dt = new Date(item.dateISO).toLocaleString('ru-RU');
+        opt.textContent = dt + (item.projectName ? ' — ' + item.projectName : '');
+        select.appendChild(opt);
+      });
+    } catch (err) {
+      select.innerHTML = '<option value="">Нет связи с архивом</option>';
+    }
+  }
+
+  async function loadArchiveItem() {
+    const select = el('archiveSelect');
+    if (!select || !select.value) { showMessage('Выберите сохранённый расчёт из списка.', true); return; }
+    if (!isAppsScriptConfigured()) { showMessage('Архив не настроен.', true); return; }
+    try {
+      const resp = await fetch(APPS_SCRIPT_URL + '?action=load&id=' + encodeURIComponent(select.value));
+      const data = await resp.json();
+      if (!data.ok) { showMessage('Не удалось загрузить расчёт: ' + (data.error || ''), true); return; }
+      loadProjectFromData({ settings: data.settings, apartments: data.apartments });
+      showMessage('Загружен расчёт от ' + new Date(data.dateISO).toLocaleString('ru-RU') + '. Отредактируйте и нажмите «Выгрузить в Google таблицы», чтобы сохранить как новую версию.', false);
+    } catch (err) {
+      showMessage('Ошибка связи с архивом.', true);
+    }
   }
 
   document.addEventListener('DOMContentLoaded', () => {
@@ -382,6 +470,8 @@
     el('downloadCsv').addEventListener('click', downloadCsv);
     el('exportSheets').addEventListener('click', exportSheets);
     el('printBtn').addEventListener('click', () => window.print());
+    if (el('refreshArchive')) el('refreshArchive').addEventListener('click', refreshArchiveList);
+    if (el('loadArchive')) el('loadArchive').addEventListener('click', loadArchiveItem);
 
     el('filterApartment').addEventListener('change', applyFilters);
     el('filterRoom').addEventListener('change', applyFilters);
@@ -402,5 +492,6 @@
     }
 
     loadProject();
+    refreshArchiveList();
   });
 })();
