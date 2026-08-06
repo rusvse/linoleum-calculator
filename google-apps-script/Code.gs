@@ -4,7 +4,8 @@ function doPost(e) {
   try {
     const data = JSON.parse(e.postData.contents || '{}');
     const target = getOrCreateSpreadsheet_();
-    const stamp = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'dd.MM.yyyy HH-mm-ss');
+    let stamp = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'dd.MM.yyyy HH-mm-ss');
+    stamp = uniqueSheetName_(target.spreadsheet, stamp);
     const sheet = target.isNew ? target.spreadsheet.getSheets()[0] : target.spreadsheet.insertSheet();
     sheet.setName(stamp);
     writeCalculation_(sheet, data, stamp);
@@ -12,6 +13,18 @@ function doPost(e) {
   } catch (error) {
     return json_({ ok: false, error: String(error) });
   }
+}
+
+function uniqueSheetName_(spreadsheet, baseName) {
+  const existing = spreadsheet.getSheets().map(function (s) { return s.getName(); });
+  if (existing.indexOf(baseName) === -1) return baseName;
+  let counter = 2;
+  let name = baseName + ' (' + counter + ')';
+  while (existing.indexOf(name) !== -1) {
+    counter++;
+    name = baseName + ' (' + counter + ')';
+  }
+  return name;
 }
 
 function getOrCreateSpreadsheet_() {
@@ -44,7 +57,7 @@ function writeCalculation_(sheet, data, stamp) {
   row += 2;
   row = writeBlock_(sheet, row, 'РАСЧЁТ', ['Маркировка', '№ квартиры', 'Название квартиры', 'Тип помещения', 'Длина, м', 'Ширина, м', 'С запасом: сторона 1, м', 'С запасом: сторона 2, м', 'Ширина рулона, м', 'Полос', 'Метраж, п.м.', 'Площадь закупки, м²', 'Остаток, м²', 'Стыков', 'Комментарий'], data.calculation || []);
   row += 2;
-  writeBlock_(sheet, row, 'СВОДКА ЗАКАЗА', ['Ширина рулона', 'Погонный метраж', 'Площадь, м²', 'Количество помещений', 'Маркировки'], data.summary || []);
+  writeBlock_(sheet, row, 'СВОДКА ЗАКАЗА', ['Ширина рулона, м', 'Погонный метраж, п.м.', 'Площадь, м²', 'Количество помещений', 'Маркировки'], data.summary || []);
   sheet.setFrozenRows(6);
   sheet.autoResizeColumns(1, 15);
 }
