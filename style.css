@@ -1,0 +1,35 @@
+*{box-sizing:border-box;}
+body{margin:0;font-family:Segoe UI,Arial,sans-serif;background:#f4f6f8;color:#1f2933;}
+header{display:flex;justify-content:space-between;align-items:center;padding:16px 24px;background:#1f6f43;color:#fff;}
+header div b{font-size:20px;display:block;}
+header div span{font-size:13px;opacity:.85;}
+main{max-width:1200px;margin:0 auto;padding:24px;display:flex;flex-direction:column;gap:20px;}
+.card{background:#fff;border-radius:10px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,.08);}
+.card h1,.card h2{margin:0 0 14px;font-size:18px;}
+.section-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px;}
+.grid.settings{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;}
+label{display:flex;flex-direction:column;font-size:13px;color:#52606d;gap:4px;}
+input,select{padding:8px 10px;border:1px solid #d3dae0;border-radius:6px;font-size:14px;}
+small{color:#9aa5b1;font-size:11px;}
+.actions{display:flex;gap:10px;margin-top:12px;flex-wrap:wrap;}
+button{cursor:pointer;border:none;border-radius:6px;padding:9px 16px;font-size:14px;font-weight:600;}
+button.primary{background:#1f6f43;color:#fff;}
+button.secondary{background:#e4e7eb;color:#1f2933;}
+button.danger{background:#fde8e8;color:#c53030;}
+button:hover{opacity:.9;}
+.apartment{border:1px solid #e4e7eb;border-radius:8px;padding:14px;margin-bottom:14px;}
+.apt-fields{display:flex;gap:10px;flex-wrap:wrap;}
+.rooms{display:flex;flex-direction:column;gap:8px;margin:12px 0;}
+.room{display:grid;grid-template-columns:1.2fr 1fr 1fr 1fr 1.4fr auto auto;gap:8px;align-items:center;}
+.room label{margin:0;}
+.table-wrap{overflow-x:auto;}
+table{width:100%;border-collapse:collapse;font-size:13px;}
+th,td{padding:8px 10px;border-bottom:1px solid #e4e7eb;text-align:left;white-space:nowrap;}
+th{background:#f4f6f8;font-weight:600;}
+.filters{display:flex;gap:8px;flex-wrap:wrap;}
+.message{min-height:20px;color:#c53030;font-size:13px;margin:8px 0 0;}
+@media print{
+  header .actions,.card .actions,.filters,#addApartment,.delete-apt,.delete-room,.copy-apt,.copy-room{display:none!important;}
+  body{background:#fff;}
+  .card{box-shadow:none;border:1px solid #ddd;}
+}
