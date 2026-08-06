@@ -3,11 +3,12 @@ const SPREADSHEET_ID_KEY = 'LINUM_SPREADSHEET_ID';
 function doPost(e) {
   try {
     const data = JSON.parse(e.postData.contents || '{}');
-    const spreadsheet = getOrCreateSpreadsheet_();
+    const target = getOrCreateSpreadsheet_();
     const stamp = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'dd.MM.yyyy HH-mm-ss');
-    const sheet = spreadsheet.insertSheet(stamp);
+    const sheet = target.isNew ? target.spreadsheet.getSheets()[0] : target.spreadsheet.insertSheet();
+    sheet.setName(stamp);
     writeCalculation_(sheet, data, stamp);
-    return json_({ ok: true, spreadsheetUrl: spreadsheet.getUrl(), sheetName: stamp });
+    return json_({ ok: true, spreadsheetUrl: target.spreadsheet.getUrl(), sheetName: stamp });
   } catch (error) {
     return json_({ ok: false, error: String(error) });
   }
@@ -17,14 +18,19 @@ function getOrCreateSpreadsheet_() {
   const properties = PropertiesService.getScriptProperties();
   const savedId = properties.getProperty(SPREADSHEET_ID_KEY);
   if (savedId) {
-    try { return SpreadsheetApp.openById(savedId); } catch (error) { properties.deleteProperty(SPREADSHEET_ID_KEY); }
+    try {
+      return { spreadsheet: SpreadsheetApp.openById(savedId), isNew: false };
+    } catch (error) {
+      properties.deleteProperty(SPREADSHEET_ID_KEY);
+    }
   }
   const spreadsheet = SpreadsheetApp.create('Расчёты линолеума');
   properties.setProperty(SPREADSHEET_ID_KEY, spreadsheet.getId());
-  return spreadsheet;
+  return { spreadsheet: spreadsheet, isNew: true };
 }
 
 function writeCalculation_(sheet, data, stamp) {
+  sheet.clear();
   sheet.getRange('A1').setValue('РАСЧЁТ ЛИНОЛЕУМА').setFontSize(16).setFontWeight('bold');
   sheet.getRange('A2').setValue('Дата и время расчёта');
   sheet.getRange('B2').setValue(stamp);
