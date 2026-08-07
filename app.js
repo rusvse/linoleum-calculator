@@ -187,8 +187,10 @@
   function renderResults(apartments, settings) {
     const resultsBody = el('results');
     const summaryBody = el('summary');
+    const apartmentPiecesBody = el('apartmentPieces');
     resultsBody.innerHTML = '';
     summaryBody.innerHTML = '';
+    if (apartmentPiecesBody) apartmentPiecesBody.innerHTML = '';
 
     const units = settings.units;
     const filterApt = el('filterApartment');
@@ -198,12 +200,17 @@
 
     const summaryMap = new Map();
     const flatRows = [];
-    let markingCounter = 1;
+    const apartmentPieces = [];
 
     apartments.forEach(apt => {
+      const aptLabel = apt.number || apt.name;
+      let markingCounter = 1;
+      const markingsForApt = [];
+
       apt.rooms.forEach(room => {
         const calc = calculateRoom(room, settings.allowanceM, settings.rollWidths, settings.mode);
-        const marking = `${apt.number || apt.name}-${String(markingCounter++).padStart(2, '0')}`;
+        const marking = `${aptLabel}-${String(markingCounter++).padStart(2, '0')}`;
+        markingsForApt.push(marking);
         const roomSizeText = `${fmtLen(room.length, units)}×${fmtLen(room.width, units)}`;
         const withAllowanceText = calc.multiStrip
           ? `${fmtLen(room.length + settings.allowanceM*2, units)}×${fmtLen(room.width + settings.allowanceM*2, units)} (${calc.multiStrip} полотна)`
@@ -245,6 +252,16 @@
           comment: room.comment || apt.comment || ''
         });
       });
+
+      if (markingsForApt.length) {
+        apartmentPieces.push({
+          apartment: apt.name,
+          number: aptLabel,
+          count: markingsForApt.length,
+          first: markingsForApt[0],
+          last: markingsForApt[markingsForApt.length - 1]
+        });
+      }
     });
 
     [...summaryMap.entries()].sort((a,b)=>a[0]-b[0]).forEach(([rw, s]) => {
@@ -258,6 +275,19 @@
       `;
       summaryBody.appendChild(tr);
     });
+
+    if (apartmentPiecesBody) {
+      apartmentPieces.forEach(ap => {
+        const tr = document.createElement('tr');
+        const rangeText = ap.count > 1 ? `${ap.first} — ${ap.last}` : ap.first;
+        tr.innerHTML = `
+          <td>${ap.apartment}</td>
+          <td>${ap.count}</td>
+          <td>${rangeText}</td>
+        `;
+        apartmentPiecesBody.appendChild(tr);
+      });
+    }
 
     function fillSelect(select, values, current) {
       const prev = current || select.value;
@@ -273,7 +303,7 @@
     fillSelect(filterRoom, roomSet);
     fillSelect(filterWidth, widthSet);
 
-    window.__linumLastCalc = { apartments, settings, summaryMap, rows: flatRows };
+    window.__linumLastCalc = { apartments, settings, summaryMap, rows: flatRows, apartmentPieces };
   }
 
   function readSettings() {
@@ -344,6 +374,7 @@
     el('apartments').innerHTML = '';
     el('results').innerHTML = '';
     el('summary').innerHTML = '';
+    if (el('apartmentPieces')) el('apartmentPieces').innerHTML = '';
     ['filterApartment','filterRoom','filterWidth'].forEach(id => {
       el(id).innerHTML = '<option value="">Все</option>';
     });
@@ -434,6 +465,12 @@
     const rows = [['Ширина рулона','Погонный метраж','Площадь','Помещений','Маркировки']];
     [...last.summaryMap.entries()].sort((a,b)=>a[0]-b[0]).forEach(([rw, s]) => {
       rows.push([fmtLen(rw, units), fmtLen(s.totalLength, units), fmt(s.totalArea) + ' м²', [...s.apartments].join('; '), s.markings.join('; ')]);
+    });
+    rows.push([]);
+    rows.push(['Квартира','Кол-во кусков','Диапазон маркировки']);
+    (last.apartmentPieces || []).forEach(ap => {
+      const rangeText = ap.count > 1 ? `${ap.first} - ${ap.last}` : ap.first;
+      rows.push([ap.apartment, ap.count, rangeText]);
     });
     const csv = rows.map(r => r.map(c => `"${String(c).replace(/"/g,'""')}"`).join(';')).join('\n');
     const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' });

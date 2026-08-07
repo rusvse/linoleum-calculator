@@ -104,6 +104,24 @@
 
   <section class="card">
     <div class="section-head">
+      <h2>Куски по квартирам</h2>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Квартира</th>
+            <th>Кол-во кусков</th>
+            <th>Диапазон маркировки</th>
+          </tr>
+        </thead>
+        <tbody id="apartmentPieces"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="section-head">
       <h2>Сводка для заказа</h2>
       <div class="actions">
         <button id="downloadCsv" class="secondary">Скачать CSV</button>
@@ -170,6 +188,6 @@
   </div>
 </template>
 
-<script src="app.js?v=20260807-bottom-only"></script>
+<script src="app.js?v=20260807-marking-fix"></script>
 </body>
 </html>
