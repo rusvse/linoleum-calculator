@@ -1,9 +1,23 @@
 /**
  * Linum — архив расчётов линолеума в Google таблице.
  *
- * Результаты, Карта раскроя, Куски по квартирам, Сводка для заказа перезаписываются каждый экспорт.
- * Архив и История позиционно дополняются.
+ * Настройка:
+ * 1. Создайте (или откройте) Google таблицу, в которой будет вестись архив.
+ * 2. Открыть для неё редактор скриптов: расширения → Apps Script.
+ * 3. Удалить содержимое по умолчанию и вставить весь этот файл целиком.
+ * 4. Сохранить, затем Наверху справа → "Развернуть" → "Новый развёртывание".
+ * 5. Выбрать тип "Веб-приложение", исполнять от имени: вы, доступ имеют: Любые.
+ * 6. Скопировать полученный URL веб-аппа и вставить его в app.js в константу APPS_SCRIPT_URL.
+ * 7. При первом вызове с сайта Google может потребовать повторного развертывания после первого теста — это нормально.
+ *
+ * При каждой выгрузке с сайта дополнительно перезаписываются 4 рабочих листа
+ * (данные последнего расчёта, можно редактировать вручную до следующей выгрузки):
+ *   - "Результаты"          — полная копия таблицы результатов с сайта
+ *   - "Карта раскроя"        — Маркировка, Квартира, Ширина рулона, Длина отреза (сгруппировано по ширине рулона)
+ *   - "Куски по квартирам"   — Квартира, Кол-во кусков, Диапазон маркировки
+ *   - "Сводка для заказа"    — Ширина рулона, Погонный метраж, Площадь, Помещений, Маркировки
  */
+
 
 var SHEET_ARCHIVE = 'Архив';
 var SHEET_HISTORY = 'История';
@@ -11,6 +25,7 @@ var SHEET_RESULTS = 'Результаты';
 var SHEET_CUTTING = 'Карта раскроя';
 var SHEET_PIECES = 'Куски по квартирам';
 var SHEET_SUMMARY = 'Сводка для заказа';
+
 
 function getOrCreateSheet_(name, headers) {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -22,6 +37,7 @@ function getOrCreateSheet_(name, headers) {
   }
   return sheet;
 }
+
 
 function clearAndWrite_(name, headers, rows) {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -38,11 +54,13 @@ function clearAndWrite_(name, headers, rows) {
   }
 }
 
+
 function doPost(e) {
   try {
     var payload = JSON.parse(e.postData.contents);
     var id = payload.id || Utilities.getUuid();
     var dateISO = payload.dateISO || new Date().toISOString();
+
 
     var archiveSheet = getOrCreateSheet_(SHEET_ARCHIVE, ['ID', 'Дата', 'Название проекта', 'Материал', 'JSON']);
     archiveSheet.appendRow([
@@ -53,6 +71,7 @@ function doPost(e) {
       JSON.stringify({ settings: payload.settings, apartments: payload.apartments })
     ]);
 
+
     var historySheet = getOrCreateSheet_(SHEET_HISTORY, ['ID', 'Дата', 'Квартира', 'Помещение', 'Размер', 'Ширина рулона', 'Метраж', 'Площадь', 'Остаток', 'Стыков', 'Комментарий']);
     var rows = payload.rows || [];
     rows.forEach(function(r) {
@@ -61,11 +80,13 @@ function doPost(e) {
       ]);
     });
 
+
     var resultsRows = payload.resultsRows || [];
     clearAndWrite_(SHEET_RESULTS, [
       'Маркировка', 'Квартира', 'Помещение', 'Размер', 'С запасом',
       'Рулон', 'Полос', 'Метраж', 'Площадь', 'Остаток', 'Стыков', 'Комментарий'
     ], resultsRows);
+
 
     var cuttingRaw = payload.cuttingRows || [];
     cuttingRaw.sort(function (a, b) {
@@ -77,11 +98,14 @@ function doPost(e) {
     });
     clearAndWrite_(SHEET_CUTTING, ['Маркировка', 'Квартира', 'Ширина рулона', 'Длина отреза'], cuttingRows);
 
+
     var piecesRows = payload.apartmentPiecesRows || [];
     clearAndWrite_(SHEET_PIECES, ['Квартира', 'Кол-во кусков', 'Диапазон маркировки'], piecesRows);
 
+
     var summaryRows = payload.summaryRows || [];
     clearAndWrite_(SHEET_SUMMARY, ['Ширина рулона', 'Погонный метраж', 'Площадь', 'Помещений', 'Маркировки'], summaryRows);
+
 
     return ContentService.createTextOutput(JSON.stringify({ ok: true, id: id, dateISO: dateISO }))
       .setMimeType(ContentService.MimeType.JSON);
@@ -91,12 +115,14 @@ function doPost(e) {
   }
 }
 
+
 function doGet(e) {
   try {
     var action = e.parameter.action || 'list';
     var archiveSheet = getOrCreateSheet_(SHEET_ARCHIVE, ['ID', 'Дата', 'Название проекта', 'Материал', 'JSON']);
     var data = archiveSheet.getDataRange().getValues();
     data.shift();
+
 
     if (action === 'list') {
       var list = data.map(function(row) {
@@ -105,6 +131,7 @@ function doGet(e) {
       return ContentService.createTextOutput(JSON.stringify({ ok: true, items: list }))
         .setMimeType(ContentService.MimeType.JSON);
     }
+
 
     if (action === 'load') {
       var id = e.parameter.id;
@@ -117,6 +144,7 @@ function doGet(e) {
       return ContentService.createTextOutput(JSON.stringify({ ok: true, id: found[0], dateISO: found[1], settings: parsed.settings, apartments: parsed.apartments }))
         .setMimeType(ContentService.MimeType.JSON);
     }
+
 
     return ContentService.createTextOutput(JSON.stringify({ ok: false, error: 'unknown_action' }))
       .setMimeType(ContentService.MimeType.JSON);
