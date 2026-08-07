@@ -524,7 +524,6 @@
   }
 
   document.addEventListener('DOMContentLoaded', () => {
-    el('addApartment').addEventListener('click', createApartment);
     if (el('addApartmentBottom')) el('addApartmentBottom').addEventListener('click', createApartment);
     if (el('calculateBottom')) el('calculateBottom').addEventListener('click', calculate);
     el('saveProject').addEventListener('click', saveProject);
