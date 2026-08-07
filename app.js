@@ -201,6 +201,8 @@
     const summaryMap = new Map();
     const flatRows = [];
     const apartmentPieces = [];
+    const resultsSheetRows = [];
+    const cuttingRows = [];
 
     apartments.forEach(apt => {
       const aptLabel = apt.number || apt.name;
@@ -215,27 +217,33 @@
         const withAllowanceText = calc.multiStrip
           ? `${fmtLen(room.length + settings.allowanceM*2, units)}×${fmtLen(room.width + settings.allowanceM*2, units)} (${calc.multiStrip} полотна)`
           : `${fmtLen(calc.cutLength, units)} по рулону`;
+        const roomLabel = room.typeName + (room.code ? ' ('+room.code+')' : '');
+        const rollWidthText = fmtLen(calc.rollWidth, units);
+        const cutLengthText = fmtLen(calc.cutLength, units);
+        const areaText = fmt(calc.usedArea) + ' м²';
+        const wasteText = fmt(calc.waste) + ' м²';
+        const commentText = room.comment || apt.comment || '';
 
         const tr = document.createElement('tr');
         tr.innerHTML = `
           <td>${marking}</td>
           <td>${apt.name}</td>
-          <td>${room.typeName}${room.code ? ' ('+room.code+')' : ''}</td>
+          <td>${roomLabel}</td>
           <td>${roomSizeText}</td>
           <td>${withAllowanceText}</td>
-          <td>${fmtLen(calc.rollWidth, units)}</td>
-          <td>${fmtLen(calc.cutLength, units)}</td>
-          <td>${fmtLen(calc.rollWidth, units)}×${fmtLen(calc.cutLength, units)}</td>
-          <td>${fmt(calc.usedArea)} м²</td>
-          <td>${fmt(calc.waste)} м²</td>
+          <td>${rollWidthText}</td>
+          <td>${rollWidthText}</td>
+          <td>${cutLengthText}</td>
+          <td>${areaText}</td>
+          <td>${wasteText}</td>
           <td>${calc.seams || 0}</td>
-          <td>${room.comment || apt.comment || ''}</td>
+          <td>${commentText}</td>
         `;
         resultsBody.appendChild(tr);
 
         aptSet.add(apt.name);
         roomSet.add(room.typeName);
-        widthSet.add(fmtLen(calc.rollWidth, units));
+        widthSet.add(rollWidthText);
 
         const key = calc.rollWidth;
         if (!summaryMap.has(key)) summaryMap.set(key, { totalLength: 0, totalArea: 0, apartments: new Set(), markings: [] });
@@ -246,10 +254,20 @@
         s.markings.push(marking);
 
         flatRows.push({
-          marking, apartment: apt.name, room: room.typeName + (room.code ? ' ('+room.code+')' : ''),
+          marking, apartment: apt.name, room: roomLabel,
           size: roomSizeText, rollWidth: calc.rollWidth, length: calc.cutLength,
           area: calc.usedArea, waste: calc.waste, seams: calc.seams || 0,
-          comment: room.comment || apt.comment || ''
+          comment: commentText
+        });
+
+        resultsSheetRows.push([
+          marking, apt.name, roomLabel, roomSizeText, withAllowanceText,
+          rollWidthText, rollWidthText, cutLengthText, areaText, wasteText, calc.seams || 0, commentText
+        ]);
+
+        cuttingRows.push({
+          marking, apartment: apt.name,
+          rollWidthNum: calc.rollWidth, rollWidthText, cutLengthText
         });
       });
 
@@ -264,22 +282,30 @@
       }
     });
 
+    const summaryRowsArr = [];
     [...summaryMap.entries()].sort((a,b)=>a[0]-b[0]).forEach(([rw, s]) => {
+      const rowValues = [
+        fmtLen(rw, units), fmtLen(s.totalLength, units), fmt(s.totalArea) + ' м²',
+        [...s.apartments].join(', '), s.markings.join(', ')
+      ];
+      summaryRowsArr.push(rowValues);
       const tr = document.createElement('tr');
       tr.innerHTML = `
-        <td>${fmtLen(rw, units)}</td>
-        <td>${fmtLen(s.totalLength, units)}</td>
-        <td>${fmt(s.totalArea)} м²</td>
-        <td>${[...s.apartments].join(', ')}</td>
-        <td>${s.markings.join(', ')}</td>
+        <td>${rowValues[0]}</td>
+        <td>${rowValues[1]}</td>
+        <td>${rowValues[2]}</td>
+        <td>${rowValues[3]}</td>
+        <td>${rowValues[4]}</td>
       `;
       summaryBody.appendChild(tr);
     });
 
+    const apartmentPiecesRowsArr = [];
     if (apartmentPiecesBody) {
       apartmentPieces.forEach(ap => {
-        const tr = document.createElement('tr');
         const rangeText = ap.count > 1 ? `${ap.first} — ${ap.last}` : ap.first;
+        apartmentPiecesRowsArr.push([ap.apartment, ap.count, rangeText]);
+        const tr = document.createElement('tr');
         tr.innerHTML = `
           <td>${ap.apartment}</td>
           <td>${ap.count}</td>
@@ -303,7 +329,10 @@
     fillSelect(filterRoom, roomSet);
     fillSelect(filterWidth, widthSet);
 
-    window.__linumLastCalc = { apartments, settings, summaryMap, rows: flatRows, apartmentPieces };
+    window.__linumLastCalc = {
+      apartments, settings, summaryMap, rows: flatRows, apartmentPieces,
+      resultsSheetRows, cuttingRows, summaryRowsArr, apartmentPiecesRowsArr
+    };
   }
 
   function readSettings() {
@@ -497,7 +526,11 @@
       id, dateISO,
       settings: last.settings,
       apartments: collectData(last.settings.units),
-      rows: last.rows
+      rows: last.rows,
+      resultsRows: last.resultsSheetRows,
+      cuttingRows: last.cuttingRows,
+      summaryRows: last.summaryRowsArr,
+      apartmentPiecesRows: last.apartmentPiecesRowsArr
     };
     showMessage('Сохраняется в Google таблицу…', false);
     try {
@@ -508,7 +541,7 @@
       });
       const data = await resp.json();
       if (data.ok) {
-        showMessage('Сохранено в архив (' + new Date(data.dateISO).toLocaleString('ru-RU') + ').', false);
+        showMessage('Сохранено в архив и на листы «Результаты», «Карта раскроя», «Куски по квартирам», «Сводка для заказа» (' + new Date(data.dateISO).toLocaleString('ru-RU') + ').', false);
         refreshArchiveList();
       } else {
         showMessage('Ошибка сохранения: ' + (data.error || 'неизвестная ошибка'), true);
