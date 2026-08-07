@@ -12,9 +12,9 @@ main{max-width:1200px;margin:0 auto;padding:24px;display:flex;flex-direction:col
 .card{background:#fff;border-radius:10px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,.08);}
 .card h1,.card h2{margin:0 0 14px;font-size:18px;}
 .section-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px;}
-.grid.settings{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;}
-label{display:flex;flex-direction:column;font-size:13px;color:#52606d;gap:4px;}
-input,select{padding:8px 10px;border:1px solid #d3dae0;border-radius:6px;font-size:14px;}
+.grid.settings{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:12px;}
+label{display:flex;flex-direction:column;font-size:13px;color:#52606d;gap:4px;min-width:0;}
+input,select{width:100%;min-width:0;padding:8px 10px;border:1px solid #d3dae0;border-radius:6px;font-size:14px;}
 small{color:#9aa5b1;font-size:11px;}
 .actions{display:flex;gap:10px;margin-top:12px;flex-wrap:wrap;}
 button{cursor:pointer;border:none;border-radius:6px;padding:9px 16px;font-size:14px;font-weight:600;}
@@ -24,9 +24,12 @@ button.danger{background:#fde8e8;color:#c53030;}
 button:hover{opacity:.9;}
 .apartment{border:1px solid #e4e7eb;border-radius:8px;padding:14px;margin-bottom:14px;}
 .apt-fields{display:flex;gap:10px;flex-wrap:wrap;}
-.rooms{display:flex;flex-direction:column;gap:8px;margin:12px 0;}
-.room{display:grid;grid-template-columns:1.2fr 1fr 1fr 1fr 1.4fr auto auto;gap:8px;align-items:center;}
+.apt-fields label{flex:1 1 180px;}
+.rooms{display:flex;flex-direction:column;gap:10px;margin:12px 0;}
+.room{display:grid;grid-template-columns:minmax(120px,1.1fr) minmax(120px,1fr) minmax(80px,.65fr) minmax(110px,.85fr) minmax(110px,.85fr) minmax(130px,1.1fr) minmax(108px,.85fr) 38px;gap:8px;align-items:end;}
+.room>*{min-width:0;}
 .room label{margin:0;}
+.room button{width:100%;white-space:nowrap;}
 .table-wrap{overflow-x:auto;}
 table{width:100%;border-collapse:collapse;font-size:13px;}
 th,td{padding:8px 10px;border-bottom:1px solid #e4e7eb;text-align:left;white-space:nowrap;}
@@ -37,12 +40,7 @@ th{background:#f4f6f8;font-weight:600;}
 .steps li{line-height:1.5;}
 .steps ul{margin-top:6px;}
 code{background:#f4f6f8;padding:2px 6px;border-radius:4px;font-size:13px;}
-@media (max-width:640px){
-  table th, table td{white-space:normal;}
-  .room{grid-template-columns:1fr;}
-}
-@media print{
-  header .actions,.card .actions,.filters,.topnav,#addApartment,.delete-apt,.delete-room,.copy-apt,.copy-room{display:none!important;}
-  body{background:#fff;}
-  .card{box-shadow:none;border:1px solid #ddd;}
-}
+@media (max-width:1200px){.grid.settings{grid-template-columns:repeat(3,minmax(0,1fr));}.room{grid-template-columns:repeat(4,minmax(0,1fr));}.room .copy-room{grid-column:span 2;}.room .delete-room{grid-column:auto;}}
+@media (max-width:900px){.grid.settings{grid-template-columns:repeat(2,minmax(0,1fr));}}
+@media (max-width:760px){header{padding:14px 16px;}main{padding:16px;}.grid.settings{grid-template-columns:1fr;}.room{grid-template-columns:1fr;}.room .copy-room{grid-column:auto;}table th,table td{white-space:normal;}.topnav{order:3;width:100%;}}
+@media print{header .actions,.card .actions,.filters,.topnav,#addApartment,.delete-apt,.delete-room,.copy-apt,.copy-room{display:none!important;}body{background:#fff;}.card{box-shadow:none;border:1px solid #ddd;}}
