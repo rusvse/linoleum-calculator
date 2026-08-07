@@ -317,21 +317,43 @@
     showMessage('Параметры сохранены локально в браузере.');
   }
 
-  function resetToBlank() {
-    el('apartments').innerHTML = '';
-    el('results').innerHTML = '';
-    el('summary').innerHTML = '';
+  function autosaveNow() {
+    try {
+      const settings = readSettings();
+      const data = { settings, apartments: collectData(settings.units) };
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    } catch (e) { /* ignore */ }
+  }
+
+  let autosaveTimer = null;
+  function autosaveDebounced() {
+    clearTimeout(autosaveTimer);
+    autosaveTimer = setTimeout(autosaveNow, 400);
+  }
+
+  function resetSettingsToDefault() {
     el('projectName').value = '';
     el('material').value = '';
     el('units').value = 'm';
     el('rollWidths').value = '2, 2.5, 3, 3.5, 4, 5';
     el('allowance').value = '10';
     el('mode').value = 'seams';
+  }
+
+  function resetApartmentsArea() {
+    el('apartments').innerHTML = '';
+    el('results').innerHTML = '';
+    el('summary').innerHTML = '';
     ['filterApartment','filterRoom','filterWidth'].forEach(id => {
       el(id).innerHTML = '<option value="">Все</option>';
     });
     window.__linumLastCalc = null;
     createApartment();
+  }
+
+  function resetToBlank() {
+    resetApartmentsArea();
+    resetSettingsToDefault();
   }
 
   function clearAll() {
@@ -340,6 +362,23 @@
     localStorage.removeItem(STORAGE_KEY);
     resetToBlank();
     showMessage('Все данные очищены. Можете начинать заполнение снова.', false);
+    autosaveNow();
+  }
+
+  function clearSettingsOnly() {
+    const ok = window.confirm('Очистить только параметры проекта (название, материал, единицы, ширины рулонов, запас, режим)? Квартиры и помещения останутся без изменений.');
+    if (!ok) return;
+    resetSettingsToDefault();
+    showMessage('Параметры проекта сброшены к значениям по умолчанию. Квартиры сохранены.', false);
+    autosaveNow();
+  }
+
+  function clearApartmentsOnly() {
+    const ok = window.confirm('Удалить все квартиры, помещения и результаты расчёта? Параметры проекта (название, единицы, рулоны и т.д.) останутся как есть.');
+    if (!ok) return;
+    resetApartmentsArea();
+    showMessage('Квартиры и результаты очищены. Можете добавлять новые квартиры. Параметры проекта сохранены.', false);
+    autosaveNow();
   }
 
   function loadProjectFromData(data) {
@@ -478,6 +517,7 @@
       if (!data.ok) { showMessage('Не удалось загрузить расчёт: ' + (data.error || ''), true); return; }
       loadProjectFromData({ settings: data.settings, apartments: data.apartments });
       showMessage('Загружен расчёт от ' + new Date(data.dateISO).toLocaleString('ru-RU') + '. Отредактируйте и нажмите «Выгрузить в Google таблицы», чтобы сохранить как новую версию.', false);
+      autosaveNow();
     } catch (err) {
       showMessage('Ошибка связи с архивом.', true);
     }
@@ -488,6 +528,8 @@
     if (el('addApartmentBottom')) el('addApartmentBottom').addEventListener('click', createApartment);
     if (el('calculateBottom')) el('calculateBottom').addEventListener('click', calculate);
     el('saveProject').addEventListener('click', saveProject);
+    if (el('clearSettings')) el('clearSettings').addEventListener('click', clearSettingsOnly);
+    if (el('clearApartments')) el('clearApartments').addEventListener('click', clearApartmentsOnly);
     el('clearAll').addEventListener('click', clearAll);
     el('downloadCsv').addEventListener('click', downloadCsv);
     el('exportSheets').addEventListener('click', exportSheets);
@@ -515,5 +557,10 @@
 
     loadProject();
     refreshArchiveList();
+
+    document.addEventListener('input', autosaveDebounced);
+    document.addEventListener('change', autosaveDebounced);
+    const apartmentsObserver = new MutationObserver(() => autosaveDebounced());
+    apartmentsObserver.observe(el('apartments'), { childList: true, subtree: true });
   });
 })();

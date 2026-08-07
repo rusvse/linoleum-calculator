@@ -39,8 +39,10 @@
     </div>
     <div class="actions">
       <button id="saveProject">Сохранить параметры</button>
+      <button id="clearSettings" class="secondary">Очистить параметры</button>
       <button id="clearAll" class="danger">Очистить всё</button>
     </div>
+    <small>Все данные сохраняются автоматически в этом браузере — можно закрыть вкладку или обновить страницу, ничего не потеряется. Актуально до нажатия одной из кнопок очистки.</small>
   </section>
 
   <section class="card">
@@ -58,7 +60,10 @@
   <section class="card">
     <div class="section-head">
       <h2>Квартиры и помещения</h2>
-      <button id="addApartment">+ Добавить квартиру</button>
+      <div class="actions">
+        <button id="addApartment">+ Добавить квартиру</button>
+        <button id="clearApartments" class="secondary">Очистить квартиры</button>
+      </div>
     </div>
     <div id="apartments"></div>
     <div class="actions bottom-actions">
@@ -156,6 +161,6 @@
   </div>
 </template>
 
-<script src="app.js?v=20260807-bottom-actions"></script>
+<script src="app.js?v=20260807-autosave"></script>
 </body>
 </html>
