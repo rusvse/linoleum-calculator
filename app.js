@@ -20,6 +20,17 @@
   };
   const fmt = n => Number.isFinite(n) ? (Math.round(n * 100) / 100).toLocaleString('ru-RU') : '—';
 
+  function toMeters(value, units) {
+    return units === 'mm' ? value / 1000 : value;
+  }
+  function fmtLen(valueMeters, units) {
+    if (!Number.isFinite(valueMeters)) return '—';
+    if (units === 'mm') {
+      return Math.round(valueMeters * 1000).toLocaleString('ru-RU') + ' мм';
+    }
+    return fmt(valueMeters) + ' м';
+  }
+
   function parseRollWidths(str) {
     return str.split(',').map(s => parseNum(s)).filter(n => Number.isFinite(n) && n > 0).sort((a,b)=>a-b);
   }
@@ -106,7 +117,7 @@
     return t ? t.name : select.value;
   }
 
-  function collectData() {
+  function collectData(units) {
     const apartments = [];
     document.querySelectorAll('#apartments .apartment').forEach(apt => {
       const number = apt.querySelector('.apt-number').value.trim();
@@ -117,14 +128,16 @@
         const typeSelect = r.querySelector('.room-type');
         const customInput = r.querySelector('.room-custom');
         const codeInput = r.querySelector('.room-code');
-        const length = parseNum(r.querySelector('.room-length').value);
-        const width = parseNum(r.querySelector('.room-width').value);
+        const rawLength = parseNum(r.querySelector('.room-length').value);
+        const rawWidth = parseNum(r.querySelector('.room-width').value);
         const roomComment = r.querySelector('.room-comment').value.trim();
-        if (!Number.isFinite(length) || !Number.isFinite(width)) return;
+        if (!Number.isFinite(rawLength) || !Number.isFinite(rawWidth)) return;
         rooms.push({
           typeName: roomTypeName(typeSelect, customInput),
           code: codeInput.value.trim(),
-          length, width, comment: roomComment
+          length: toMeters(rawLength, units),
+          width: toMeters(rawWidth, units),
+          comment: roomComment
         });
       });
       if (rooms.length) apartments.push({ number, name, comment, rooms });
@@ -177,6 +190,7 @@
     resultsBody.innerHTML = '';
     summaryBody.innerHTML = '';
 
+    const units = settings.units;
     const filterApt = el('filterApartment');
     const filterRoom = el('filterRoom');
     const filterWidth = el('filterWidth');
@@ -190,10 +204,10 @@
       apt.rooms.forEach(room => {
         const calc = calculateRoom(room, settings.allowanceM, settings.rollWidths, settings.mode);
         const marking = `${apt.number || apt.name}-${String(markingCounter++).padStart(2, '0')}`;
-        const roomSizeText = `${fmt(room.length)}×${fmt(room.width)} м`;
+        const roomSizeText = `${fmtLen(room.length, units)}×${fmtLen(room.width, units)}`;
         const withAllowanceText = calc.multiStrip
-          ? `${fmt(room.length + settings.allowanceM*2)}×${fmt(room.width + settings.allowanceM*2)} м (${calc.multiStrip} полотна)`
-          : `${fmt(calc.cutLength)} м по рулону`;
+          ? `${fmtLen(room.length + settings.allowanceM*2, units)}×${fmtLen(room.width + settings.allowanceM*2, units)} (${calc.multiStrip} полотна)`
+          : `${fmtLen(calc.cutLength, units)} по рулону`;
 
         const tr = document.createElement('tr');
         tr.innerHTML = `
@@ -202,9 +216,9 @@
           <td>${room.typeName}${room.code ? ' ('+room.code+')' : ''}</td>
           <td>${roomSizeText}</td>
           <td>${withAllowanceText}</td>
-          <td>${fmt(calc.rollWidth)} м</td>
-          <td>${fmt(calc.cutLength)} м</td>
-          <td>${fmt(calc.rollWidth)}×${fmt(calc.cutLength)}</td>
+          <td>${fmtLen(calc.rollWidth, units)}</td>
+          <td>${fmtLen(calc.cutLength, units)}</td>
+          <td>${fmtLen(calc.rollWidth, units)}×${fmtLen(calc.cutLength, units)}</td>
           <td>${fmt(calc.usedArea)} м²</td>
           <td>${fmt(calc.waste)} м²</td>
           <td>${calc.seams || 0}</td>
@@ -214,7 +228,7 @@
 
         aptSet.add(apt.name);
         roomSet.add(room.typeName);
-        widthSet.add(calc.rollWidth);
+        widthSet.add(fmtLen(calc.rollWidth, units));
 
         const key = calc.rollWidth;
         if (!summaryMap.has(key)) summaryMap.set(key, { totalLength: 0, totalArea: 0, apartments: new Set(), markings: [] });
@@ -236,8 +250,8 @@
     [...summaryMap.entries()].sort((a,b)=>a[0]-b[0]).forEach(([rw, s]) => {
       const tr = document.createElement('tr');
       tr.innerHTML = `
-        <td>${fmt(rw)} м</td>
-        <td>${fmt(s.totalLength)} м</td>
+        <td>${fmtLen(rw, units)}</td>
+        <td>${fmtLen(s.totalLength, units)}</td>
         <td>${fmt(s.totalArea)} м²</td>
         <td>${[...s.apartments].join(', ')}</td>
         <td>${s.markings.join(', ')}</td>
@@ -257,7 +271,7 @@
     }
     fillSelect(filterApt, aptSet);
     fillSelect(filterRoom, roomSet);
-    fillSelect(filterWidth, [...widthSet].map(fmt));
+    fillSelect(filterWidth, widthSet);
 
     window.__linumLastCalc = { apartments, settings, summaryMap, rows: flatRows };
   }
@@ -266,6 +280,7 @@
     return {
       projectName: el('projectName').value.trim(),
       material: el('material').value.trim(),
+      units: el('units').value,
       rollWidths: parseRollWidths(el('rollWidths').value),
       allowanceM: (parseNum(el('allowance').value) || 0) / 100,
       mode: el('mode').value
@@ -279,8 +294,8 @@
   }
 
   function calculate() {
-    const apartments = collectData();
     const settings = readSettings();
+    const apartments = collectData(settings.units);
     if (!apartments.length) {
       showMessage('Добавьте хотя бы одно помещение с размерами.', true);
       return;
@@ -294,7 +309,8 @@
   }
 
   function saveProject() {
-    const data = { settings: readSettings(), apartments: collectData() };
+    const settings = readSettings();
+    const data = { settings, apartments: collectData(settings.units) };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
     showMessage('Параметры сохранены локально в браузере.');
   }
@@ -305,6 +321,7 @@
     el('summary').innerHTML = '';
     el('projectName').value = '';
     el('material').value = '';
+    el('units').value = 'm';
     el('rollWidths').value = '2, 2.5, 3, 3.5, 4, 5';
     el('allowance').value = '10';
     el('mode').value = 'seams';
@@ -327,6 +344,8 @@
     el('apartments').innerHTML = '';
     el('projectName').value = data.settings?.projectName || '';
     el('material').value = data.settings?.material || '';
+    const units = data.settings?.units === 'mm' ? 'mm' : 'm';
+    el('units').value = units;
     if (data.settings?.rollWidths?.length) el('rollWidths').value = data.settings.rollWidths.join(', ');
     if (data.settings?.allowanceM !== undefined) el('allowance').value = Math.round(data.settings.allowanceM * 100);
     if (data.settings?.mode) el('mode').value = data.settings.mode;
@@ -346,8 +365,8 @@
           r.querySelector('.room-type').dispatchEvent(new Event('change'));
           if (!typeMatch) r.querySelector('.room-custom').value = room.typeName;
           r.querySelector('.room-code').value = room.code || '';
-          r.querySelector('.room-length').value = room.length;
-          r.querySelector('.room-width').value = room.width;
+          r.querySelector('.room-length').value = units === 'mm' ? Math.round(room.length * 1000) : room.length;
+          r.querySelector('.room-width').value = units === 'mm' ? Math.round(room.width * 1000) : room.width;
           r.querySelector('.room-comment').value = room.comment || '';
         });
       });
@@ -370,9 +389,10 @@
   function downloadCsv() {
     const last = window.__linumLastCalc;
     if (!last) { showMessage('Сначала выполните расчёт.', true); return; }
+    const units = last.settings.units;
     const rows = [['Ширина рулона','Погонный метраж','Площадь','Помещений','Маркировки']];
     [...last.summaryMap.entries()].sort((a,b)=>a[0]-b[0]).forEach(([rw, s]) => {
-      rows.push([fmt(rw), fmt(s.totalLength), fmt(s.totalArea), [...s.apartments].join('; '), s.markings.join('; ')]);
+      rows.push([fmtLen(rw, units), fmtLen(s.totalLength, units), fmt(s.totalArea) + ' м²', [...s.apartments].join('; '), s.markings.join('; ')]);
     });
     const csv = rows.map(r => r.map(c => `"${String(c).replace(/"/g,'""')}"`).join(';')).join('\n');
     const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' });
@@ -398,7 +418,7 @@
     const payload = {
       id, dateISO,
       settings: last.settings,
-      apartments: collectData(),
+      apartments: collectData(last.settings.units),
       rows: last.rows
     };
     showMessage('Сохраняется в Google таблицу…', false);
@@ -484,7 +504,7 @@
         const cells = tr.children;
         const aptName = cells[1]?.textContent || '';
         const roomName = (cells[2]?.textContent || '').split(' (')[0];
-        const rollWidth = cells[5]?.textContent?.replace(' м','').trim() || '';
+        const rollWidth = cells[5]?.textContent || '';
         const show = (!aVal || aptName === aVal) && (!rVal || roomName === rVal) && (!wVal || rollWidth === wVal);
         tr.style.display = show ? '' : 'none';
       });
