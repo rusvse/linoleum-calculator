@@ -306,6 +306,8 @@
     }
     renderResults(apartments, settings);
     showMessage('Готово: рассчитано ' + apartments.reduce((n,a)=>n+a.rooms.length,0) + ' помещений.');
+    const resultsSection = el('results')?.closest('section');
+    if (resultsSection) resultsSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
 
   function saveProject() {
@@ -483,7 +485,8 @@
 
   document.addEventListener('DOMContentLoaded', () => {
     el('addApartment').addEventListener('click', createApartment);
-    el('calculate').addEventListener('click', calculate);
+    if (el('addApartmentBottom')) el('addApartmentBottom').addEventListener('click', createApartment);
+    if (el('calculateBottom')) el('calculateBottom').addEventListener('click', calculate);
     el('saveProject').addEventListener('click', saveProject);
     el('clearAll').addEventListener('click', clearAll);
     el('downloadCsv').addEventListener('click', downloadCsv);
