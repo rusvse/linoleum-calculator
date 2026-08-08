@@ -8,7 +8,10 @@
 }
 *{box-sizing:border-box;}
 body{margin:0;font-family:Segoe UI,Arial,sans-serif;background:#f4f6f8;color:var(--text);}
-header{display:flex;justify-content:space-between;align-items:center;padding:16px 24px;background:var(--accent);color:#fff;flex-wrap:wrap;gap:12px;}
+header{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;padding:16px 24px;background:var(--accent);color:#fff;gap:12px;}
+header>div:first-child{justify-self:start;}
+header .topnav{justify-self:center;}
+header>button{justify-self:end;}
 header div b{font-size:20px;display:block;}
 header div span{font-size:13px;opacity:.85;}
 .topnav{display:flex;gap:8px;flex-wrap:wrap;}
@@ -95,3 +98,8 @@ code{background:#f4f6f8;padding:2px 6px;border-radius:4px;font-size:13px;}
   .topnav{order:3;width:100%;}
 }
 @media print{header .actions,.card .actions,.filters,.topnav,#addApartment,.delete-apt,.delete-room,.copy-apt,.copy-room{display:none!important;}body{background:#fff;}.card{box-shadow:none;border:1px solid #ddd;}}
+@media (max-width:640px){
+  header{grid-template-columns:1fr;}
+  header>div:first-child,header .topnav,header>button,header>span{justify-self:stretch;text-align:center;}
+  header .topnav{justify-content:center;}
+}
