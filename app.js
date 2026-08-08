@@ -205,7 +205,7 @@
     const resultsSheetRowsRaw = [];
     const cuttingRows = [];
 
-    apartments.forEach(apt => {
+    apartments.forEach((apt, aptIndex) => {
       const aptLabel = apt.number || apt.name;
       let markingCounter = 1;
       const markingsForApt = [];
@@ -267,10 +267,11 @@
         ]);
 
         resultsSheetRowsRaw.push({
-          marking, apartment: apt.name, room: roomLabel,
+          marking, apartment: apt.name, room: roomLabel, aptIndex,
           lengthM: room.length, widthM: room.width,
           withAllowanceText,
           rollWidthM: calc.rollWidth, cutLengthM: calc.cutLength,
+          multiStrip: calc.multiStrip || 1,
           area: Math.round(calc.usedArea * 100) / 100,
           waste: Math.round(calc.waste * 100) / 100,
           seams: calc.seams || 0,
@@ -540,6 +541,7 @@
     styleHeaderRow(wsResults.getRow(1));
 
     let totalArea = 0, totalWaste = 0, totalLength = 0;
+    const bandColors = ['FFFFFFFF', 'FFEDF0F1'];
     (last.resultsSheetRowsRaw || []).forEach(r => {
       const row = wsResults.addRow([
         r.marking, r.apartment, r.room, toDisplayLen(r.lengthM), toDisplayLen(r.widthM), r.withAllowanceText,
@@ -552,6 +554,12 @@
       row.getCell(9).numFmt = areaNumFmt;
       row.getCell(10).numFmt = areaNumFmt;
       row.getCell(12).alignment = { wrapText: true };
+
+      const bandColor = bandColors[r.aptIndex % 2];
+      row.eachCell({ includeEmpty: true }, cell => {
+        if (!cell.fill) cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: bandColor } };
+      });
+
       totalArea += r.area;
       totalWaste += r.waste;
       totalLength += toDisplayLen(r.cutLengthM);
@@ -619,6 +627,65 @@
     autoWidth(wsSummary, summaryHeader.length);
     wsSummary.getColumn(4).width = 30;
     wsSummary.getColumn(5).width = 40;
+
+    // Лист 4: Схема раскроя — упрощённая визуализация каждого куска на полотне рулона
+    const wsScheme = wb.addWorksheet('Схема раскроя', { views: [{ showGridLines: false }] });
+    const SCHEME_COL_W = 2.2;
+    const SCHEME_ROW_H = 12;
+    const SCALE_MM_PER_COL = 150;
+    const SCALE_MM_PER_ROW = 150;
+    const MAX_SCHEME_COLS = 22;
+    let schemeCursorRow = 1;
+    const MAX_SCHEME_ITEMS = 80;
+    const schemeItems = (last.resultsSheetRowsRaw || []);
+    if (schemeItems.length > MAX_SCHEME_ITEMS) {
+      const noteRow = wsScheme.getRow(schemeCursorRow);
+      noteRow.getCell(1).value = `Показаны первые ${MAX_SCHEME_ITEMS} из ${schemeItems.length} кусков. Полный список — на листе "Результаты".`;
+      noteRow.getCell(1).font = { italic: true, color: { argb: 'FF9AA5B1' } };
+      schemeCursorRow += 2;
+    }
+    schemeItems.slice(0, MAX_SCHEME_ITEMS).forEach(r => {
+      const rollWidthMm = units === 'mm' ? Math.round(r.rollWidthM * 1000) : Math.round(r.rollWidthM * 1000);
+      const cutLengthMm = Math.round(r.cutLengthM * 1000);
+      const stripsCount = r.multiStrip || 1;
+
+      const colsForRoll = Math.max(2, Math.min(MAX_SCHEME_COLS, Math.round(rollWidthMm / SCALE_MM_PER_COL)));
+      const rowsForCut = Math.max(2, Math.round(cutLengthMm / SCALE_MM_PER_ROW));
+
+      const titleRow = wsScheme.getRow(schemeCursorRow);
+      titleRow.getCell(1).value = `${r.marking} — ${r.apartment}, ${r.room} (рулон ${units === 'mm' ? rollWidthMm + ' мм' : (rollWidthMm/1000).toFixed(2) + ' м'}, отрез ${units === 'mm' ? cutLengthMm + ' мм' : (cutLengthMm/1000).toFixed(2) + ' м'}${stripsCount > 1 ? ', ' + stripsCount + ' полотна' : ''})`;
+      titleRow.getCell(1).font = { bold: true, size: 11 };
+      schemeCursorRow += 1;
+
+      const blockStartRow = schemeCursorRow;
+      for (let stripIdx = 0; stripIdx < stripsCount; stripIdx++) {
+        const colOffset = stripIdx * (colsForRoll + 1);
+        for (let rr = 0; rr < rowsForCut; rr++) {
+          const excelRow = wsScheme.getRow(blockStartRow + rr);
+          excelRow.height = SCHEME_ROW_H;
+          for (let cc = 0; cc < colsForRoll; cc++) {
+            const cell = excelRow.getCell(colOffset + cc + 1);
+            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFBFD4D8' } };
+            cell.border = {
+              top: { style: 'thin', color: { argb: 'FF5B686D' } },
+              left: { style: 'thin', color: { argb: 'FF5B686D' } },
+              right: { style: 'thin', color: { argb: 'FF5B686D' } },
+              bottom: { style: 'thin', color: { argb: 'FF5B686D' } }
+            };
+          }
+        }
+        const labelCell = wsScheme.getRow(blockStartRow).getCell(colOffset + 1);
+        labelCell.value = stripsCount > 1 ? `Полотно ${stripIdx + 1}` : r.marking;
+        labelCell.font = { bold: true, size: 9, color: { argb: 'FF1F2933' } };
+        labelCell.alignment = { wrapText: true, vertical: 'top' };
+      }
+
+      schemeCursorRow = blockStartRow + rowsForCut + 2;
+    });
+
+    for (let c = 1; c <= MAX_SCHEME_COLS * 2 + 2; c++) {
+      wsScheme.getColumn(c).width = SCHEME_COL_W;
+    }
 
     const fileName = (last.settings.projectName || 'linum') + '_zakaz.xlsx';
     const buffer = await wb.xlsx.writeBuffer();
