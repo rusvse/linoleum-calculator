@@ -1,11 +1,11 @@
 <!doctype html>
 <html lang="ru">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Линум — расчёт линолеума</title>
-<link rel="stylesheet" href="style.css">
-<script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Линум — расчёт линолеума</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
 </head>
 <body>
 <header>
@@ -37,64 +37,67 @@
         </select>
       </label>
     </div>
-    <p class="settings-hint">Единицы измерения влияют на ввод длины/ширины помещений и на результаты расчёта. Ширины рулонов указываются всегда в метрах через запятую.</p>
-    <div class="actions">
-      <button id="saveProject">Сохранить параметры</button>
+    <div class="hint" style="font-size:12px; color:#7b8794; margin-top:8px;">Индивидуальный запас задаётся у помещения. Если поле оставлено пустым, применяется «Запас с каждой стороны» из этого блока.</div>
+    <div class="actions" style="margin-top:12px;">
+      <button id="saveProject" class="secondary">Сохранить параметры</button>
       <button id="clearSettings" class="secondary">Очистить параметры</button>
-      <button id="clearAll" class="danger">Очистить всё</button>
+      <button id="clearAll" class="danger" style="margin-left:auto; background:#fde8e8; color:#c53030; border:0; padding:8px 12px; border-radius:6px; cursor:pointer;">Очистить всё</button>
     </div>
-    <small>Все данные сохраняются автоматически в этом браузере — можно закрыть вкладку или обновить страницу, ничего не потеряется. Актуально до нажатия одной из кнопок очистки.</small>
   </section>
 
   <section class="card">
-    <div class="section-head">
-      <h2>Архив расчётов (Google таблица)</h2>
+    <div class="section-head" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+      <h2 style="margin:0;">Архив расчётов (Google таблица)</h2>
       <button id="refreshArchive" class="secondary">↓ Обновить список</button>
     </div>
-    <div class="filters">
-      <select id="archiveSelect"><option value="">Архив не загружен</option></select>
-      <button id="loadArchive" class="primary">Загрузить выбранный расчёт</button>
+    <div style="display:flex; flex-direction:column; gap:12px;">
+      <select id="archiveList" style="width:100%; height:38px; padding:8px; border:1px solid #d3dae0; border-radius:6px; background:#fff;"><option value="">Загрузка...</option></select>
+      <div class="actions">
+        <button id="loadArchiveBtn" class="primary" style="background:#1f6f43; color:#fff; border:0; padding:8px 14px; border-radius:6px; font-weight:600; cursor:pointer;">Загрузить выбранный расчёт</button>
+      </div>
+      <div class="hint" style="font-size:12px; color:#7b8794;">Сохранённые расчёты хранятся в Google таблице после нажатия «Выгрузить в Google таблицы» в конце страницы. Выберите дату из списка, чтобы вернуть старый расчёт для редактирования.</div>
     </div>
-    <small>Сохранённые расчёты хранятся в Google таблице после нажатия «Выгрузить в Google таблицы» в конце страницы. Выберите дату из списка, чтобы вернуть старый расчёт для редактирования.</small>
   </section>
 
   <section class="card">
-    <div class="section-head">
-      <h2>Квартиры и помещения</h2>
+    <div class="section-head" style="margin-bottom:16px;">
+      <h2 style="margin:0;">Квартиры и помещения</h2>
     </div>
     <div id="apartments"></div>
-    <div class="actions bottom-actions">
-      <button id="addApartmentBottom" class="secondary">+ Добавить квартиру</button>
-      <button id="clearApartments" class="secondary">Очистить квартиры</button>
-      <button id="calculateBottom" class="primary">Рассчитать</button>
+    <div class="actions bottom-actions" style="display:flex; gap:8px; margin-top:16px;">
+      <button id="addApartmentBottom" class="secondary" style="background:#e4e7eb; border:0; padding:8px 12px; border-radius:6px; cursor:pointer;">+ Добавить квартиру</button>
+      <button id="clearApartments" class="secondary" style="background:#e4e7eb; border:0; padding:8px 12px; border-radius:6px; cursor:pointer;">Очистить квартиры</button>
+      <button id="calculateBottom" class="primary" style="background:#1f6f43; color:#fff; border:0; padding:8px 14px; border-radius:6px; font-weight:600; cursor:pointer;">Рассчитать</button>
     </div>
   </section>
 
   <section class="card">
-    <div class="section-head">
-      <h2>Результаты расчёта</h2>
-      <div class="filters">
-        <select id="filterApartment"><option value="">Все квартиры</option></select>
-        <select id="filterRoom"><option value="">Все помещения</option></select>
-        <select id="filterWidth"><option value="">Все ширины</option></select>
+    <div class="section-head" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px; margin-bottom:16px;">
+      <h2 style="margin:0;">Результаты расчёта</h2>
+      <div class="filters" style="display:flex; gap:8px;">
+        <select id="filterApartment" style="padding:6px; border:1px solid #d3dae0; border-radius:4px;"><option value="">Все квартиры</option></select>
+        <select id="filterRoom" style="padding:6px; border:1px solid #d3dae0; border-radius:4px;"><option value="">Все помещения</option></select>
+        <select id="filterWidth" style="padding:6px; border:1px solid #d3dae0; border-radius:4px;"><option value="">Все ширины</option></select>
       </div>
     </div>
-    <div class="table-wrap">
-      <table>
+    <div class="table-wrap" style="overflow-x:auto;">
+      <table style="width:100%; border-collapse:collapse; text-align:left; font-size:13px;">
         <thead>
-          <tr>
-            <th>Маркировка</th>
-            <th>Квартира</th>
-            <th>Помещение</th>
-            <th>Размер</th>
-            <th>С запасом</th>
-            <th>рулон</th>
-            <th>Полос</th>
-            <th>Метраж</th>
-            <th>Площадь</th>
-            <th>Остаток</th>
-            <th>Стыков</th>
-            <th>Комментарий</th>
+          <tr style="background:#f4f6f8;">
+            <th style="padding:8px; border:1px solid #e4e7eb;">Маркировка</th>
+            <th style="padding:8px; border:1px solid #e4e7eb;">Квартира</th>
+            <th style="padding:8px; border:1px solid #e4e7eb;">Помещение</th>
+            <th style="padding:8px; border:1px solid #e4e7eb;">Размер</th>
+            <th style="padding:8px; border:1px solid #e4e7eb;">Запас</th>
+            <th style="padding:8px; border:1px solid #e4e7eb;">С запасом</th>
+            <th style="padding:8px; border:1px solid #e4e7eb;">Рулон</th>
+            <th style="padding:8px; border:1px solid #e4e7eb;">Полос</th>
+            <th style="padding:8px; border:1px solid #e4e7eb;">Метраж</th>
+            <th style="padding:8px; border:1px solid #e4e7eb;">Площадь</th>
+            <th style="padding:8px; border:1px solid #e4e7eb;">Остаток</th>
+            <th style="padding:8px; border:1px solid #e4e7eb;">% ост.</th>
+            <th style="padding:8px; border:1px solid #e4e7eb;">Стыков</th>
+            <th style="padding:8px; border:1px solid #e4e7eb;">Комментарий</th>
           </tr>
         </thead>
         <tbody id="results"></tbody>
@@ -103,16 +106,16 @@
   </section>
 
   <section class="card">
-    <div class="section-head">
-      <h2>Куски по квартирам</h2>
+    <div class="section-head" style="margin-bottom:16px;">
+      <h2 style="margin:0;">Куски по квартирам</h2>
     </div>
-    <div class="table-wrap">
-      <table>
+    <div class="table-wrap" style="overflow-x:auto;">
+      <table style="width:100%; border-collapse:collapse; text-align:left; font-size:13px;">
         <thead>
-          <tr>
-            <th>Квартира</th>
-            <th>Кол-во кусков</th>
-            <th>Диапазон маркировки</th>
+          <tr style="background:#f4f6f8;">
+            <th style="padding:8px; border:1px solid #e4e7eb;">Квартира</th>
+            <th style="padding:8px; border:1px solid #e4e7eb;">Кол-во кусков</th>
+            <th style="padding:8px; border:1px solid #e4e7eb;">Диапазон маркировки</th>
           </tr>
         </thead>
         <tbody id="apartmentPieces"></tbody>
@@ -121,73 +124,63 @@
   </section>
 
   <section class="card">
-    <div class="section-head">
-      <h2>Сводка для заказа</h2>
-      <div class="actions">
-        <button id="downloadCsv" class="secondary">Скачать Excel (.xlsx)</button>
-        <button id="exportSheets" class="primary">Выгрузить в Google таблицы</button>
+    <div class="section-head" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px; margin-bottom:16px;">
+      <h2 style="margin:0;">Сводка для заказа</h2>
+      <div class="actions" style="display:flex; gap:8px;">
+        <button id="downloadCsv" class="secondary" style="background:#e4e7eb; border:0; padding:8px 12px; border-radius:6px; cursor:pointer;">Скачать Excel (.xlsx)</button>
+        <button id="exportSheets" class="primary" style="background:#1f6f43; color:#fff; border:0; padding:8px 14px; border-radius:6px; font-weight:600; cursor:pointer;">Выгрузить в Google таблицы</button>
       </div>
     </div>
-    <div class="table-wrap">
-      <table>
+    <div class="table-wrap" style="overflow-x:auto;">
+      <table style="width:100%; border-collapse:collapse; text-align:left; font-size:13px;">
         <thead>
-          <tr>
-            <th>Ширина рулона</th>
-            <th>Погонный метраж</th>
-            <th>Площадь</th>
-            <th>Помещений</th>
-            <th>Маркировки</th>
+          <tr style="background:#f4f6f8;">
+            <th style="padding:8px; border:1px solid #e4e7eb;">Ширина рулона</th>
+            <th style="padding:8px; border:1px solid #e4e7eb;">Погонный метраж</th>
+            <th style="padding:8px; border:1px solid #e4e7eb;">Площадь</th>
+            <th style="padding:8px; border:1px solid #e4e7eb;">Квартиры</th>
+            <th style="padding:8px; border:1px solid #e4e7eb;">Маркировки для отрезки</th>
           </tr>
         </thead>
         <tbody id="summary"></tbody>
       </table>
     </div>
-    <p id="message" class="message"></p>
   </section>
 </main>
 
 <template id="apartmentTpl">
-  <article class="apartment">
-    <div class="apt-head">
-      <div class="apt-fields">
-        <label>№ квартиры<input class="apt-number" placeholder="01"></label>
-        <label>Название<input class="apt-name" placeholder="КВ01"></label>
-        <label class="apt-comment-field">Комментарий<input class="apt-comment" placeholder="Необязательно"></label>
-      </div>
-      <div class="actions apt-actions">
-        <button class="copy-apt secondary">Копировать</button>
-        <button class="delete-apt danger">Удалить</button>
-      </div>
+  <article class="apartment" style="background:#fff; border:1px solid #d3dae0; border-radius:8px; padding:16px; margin-bottom:16px;">
+    <div class="apt-fields" style="display:grid; grid-template-columns: minmax(90px, .7fr) minmax(120px, 1fr) minmax(160px, 1.6fr); gap:12px; margin-bottom:12px;">
+      <label style="display:flex; flex-direction:column; font-size:12px; color:#52606d; gap:4px;">№ квартиры<input class="apt-number" placeholder="Например, 139" style="padding:6px; border:1px solid #d3dae0; border-radius:4px;"></label>
+      <label style="display:flex; flex-direction:column; font-size:12px; color:#52606d; gap:4px;">Название<input class="apt-name" placeholder="Например, КВ139" style="padding:6px; border:1px solid #d3dae0; border-radius:4px;"></label>
+      <label style="display:flex; flex-direction:column; font-size:12px; color:#52606d; gap:4px;">Комментарий<input class="apt-comment" placeholder="Подъезд / этаж" style="padding:6px; border:1px solid #d3dae0; border-radius:4px;"></label>
     </div>
-    <div class="rooms-head">
-      <span>Помещение</span>
-      <span>Длина</span>
-      <span>Ширина</span>
-      <span>Комментарий</span>
-      <span></span>
+    <div class="actions" style="margin-bottom:16px; display:flex; gap:8px;">
+      <button class="copy-apt secondary" style="background:#e4e7eb; border:0; padding:6px 10px; border-radius:4px; cursor:pointer; font-size:12px;">Копировать</button>
+      <button class="delete-apt danger" style="background:#fde8e8; color:#c53030; border:0; padding:6px 10px; border-radius:4px; cursor:pointer; font-size:12px;">Удалить квартиру</button>
     </div>
-    <div class="rooms"></div>
-    <button class="add-room secondary">+ Добавить помещение</button>
+    <div class="rooms-head" style="display:grid; grid-template-columns: minmax(130px, 1.3fr) minmax(80px, .8fr) minmax(80px, .8fr) minmax(80px, .8fr) minmax(140px, 1.3fr) 80px; gap:8px; font-size:11px; font-weight:600; color:#7b8794; text-transform:uppercase; margin-bottom:8px; padding:0 4px;">
+      <span>Помещение</span><span>Длина</span><span>Ширина</span><span>Запас, см</span><span>Комментарий</span><span></span>
+    </div>
+    <div class="rooms" style="display:flex; flex-direction:column; gap:8px; margin-bottom:12px;"></div>
+    <button class="add-room secondary" style="background:#e4e7eb; border:0; padding:6px 12px; border-radius:4px; cursor:pointer; font-size:13px;">+ Добавить помещение</button>
   </article>
 </template>
 
 <template id="roomTpl">
-  <div class="room">
-    <div class="room-main">
-      <select class="room-type"></select>
-      <input class="room-custom" placeholder="Своё название" hidden>
-      <input class="room-code" placeholder="Код" hidden>
-    </div>
-    <label class="room-dim"><span class="mobile-label">Длина</span><input class="room-length" inputmode="decimal" placeholder="4,20"></label>
-    <label class="room-dim"><span class="mobile-label">Ширина</span><input class="room-width" inputmode="decimal" placeholder="3,35"></label>
-    <input class="room-comment" placeholder="Комментарий">
-    <div class="room-actions">
-      <button class="copy-room secondary">Копировать</button>
-      <button class="delete-room danger">×</button>
+  <div class="room" style="display:grid; grid-template-columns: minmax(130px, 1.3fr) minmax(80px, .8fr) minmax(80px, .8fr) minmax(80px, .8fr) minmax(140px, 1.3fr) 80px; gap:8px; align-items:center; background:#fbfcfd; border:1px solid #e4e7eb; padding:8px; border-radius:6px;">
+    <select class="room-type" style="padding:6px; border:1px solid #d3dae0; border-radius:4px; width:100%;"></select>
+    <input class="room-length" type="number" min="0" step="0.001" placeholder="0" style="padding:6px; border:1px solid #d3dae0; border-radius:4px; width:100%;">
+    <input class="room-width" type="number" min="0" step="0.001" placeholder="0" style="padding:6px; border:1px solid #d3dae0; border-radius:4px; width:100%;">
+    <input class="room-allowance" type="number" min="0" step="0.5" placeholder="По умолч." style="padding:6px; border:1px solid #d3dae0; border-radius:4px; width:100%;">
+    <input class="room-comment" placeholder="Дверь, ниша" style="padding:6px; border:1px solid #d3dae0; border-radius:4px; width:100%;">
+    <div style="display:flex; gap:4px; justify-content:flex-end;">
+      <button class="copy-room secondary" style="background:#e4e7eb; border:0; padding:6px; border-radius:4px; cursor:pointer; font-size:11px;" title="Копировать">КП</button>
+      <button class="delete-room danger" style="background:#fde8e8; color:#c53030; border:0; padding:6px 10px; border-radius:4px; cursor:pointer; font-weight:bold;" title="Удалить">×</button>
     </div>
   </div>
 </template>
 
-<script src="app.js?v=20260807-rebuild"></script>
+<script src="app.js"></script>
 </body>
 </html>
