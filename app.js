@@ -1,170 +1,823 @@
-(()=>{
-  const STORAGE_KEY='linum_project_v3';
-  const el=id=>document.getElementById(id);
-  const n=v=>{const x=parseFloat(String(v??'').replace(',','.'));return Number.isFinite(x)?x:NaN};
-  const fmt=n=>Number.isFinite(n)?(Math.round(n*100)/100).toLocaleString('ru-RU'):'';
-  const mFromInput=(v,units)=>units==='mm'?n(v)/1000:n(v);
-  const len=(m,units)=>units==='mm'?`${Math.round(m*1000).toLocaleString('ru-RU')} мм`:`${fmt(m)} м`;
-  const area=m2=>`${fmt(m2)} м²`;
-  const pct=(waste,used)=>{if(!used)return '0%';return `${Math.round((waste/used)*100)}%`};
-  const clone=id=>el(id).content.cloneNode(true);
-  let lastCalc=null;
+(function(){
+  const ROOM_TYPES = [
+    {code:'living', name:'гостиная'},
+    {code:'bedroom', name:'спальня'},
+    {code:'kitchen', name:'кухня'},
+    {code:'hall', name:'коридор'},
+    {code:'bath', name:'ванная'},
+    {code:'balcony', name:'балкон/лоджия'},
+    {code:'custom', name:'Своё...'}
+  ];
 
-  function show(text,error=false){const box=el('message');box.textContent=text;box.className=`message ${error?'error':'success'}`;setTimeout(()=>{if(box.textContent===text)box.textContent=''},5000)}
-  function parseRollWidths(){return el('rollWidths').value.split(',').map(n).filter(v=>Number.isFinite(v)&&v>0).sort((a,b)=>a-b)}
-  function activeUnits(){return el('units').value}
-  function effectiveAllowance(room,defaultM){return Number.isFinite(room.allowanceM)?room.allowanceM:defaultM}
+  const STORAGE_KEY = 'linum_project_v1';
+  const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzDgb9kcSqO75OzhMGxktfUQroonmLS8NIDCfTphROe0W02Aln3MBzTTV6iQZWRx5Np/exec';
 
-  function addRoom(container,data={}){
-    const row=clone('roomTpl').querySelector('.room');
-    row.querySelector('.room-type').value=data.type||'гостиная';
-    row.querySelector('.room-length').value=data.lengthInput??'';
-    row.querySelector('.room-width').value=data.widthInput??'';
-    row.querySelector('.room-allowance').value=Number.isFinite(data.allowanceCm)?data.allowanceCm:'';
-    row.querySelector('.room-comment').value=data.comment||'';
-    row.querySelector('.delete-room').onclick=()=>row.remove();
-    row.querySelector('.copy-room').onclick=()=>addRoom(container,roomToForm(row));
-    container.appendChild(row);
+  const el = id => document.getElementById(id);
+  const parseNum = v => {
+    if (v === undefined || v === null) return NaN;
+    const s = String(v).trim().replace(',', '.');
+    return s === '' ? NaN : parseFloat(s);
+  };
+  const fmt = n => Number.isFinite(n) ? (Math.round(n * 100) / 100).toLocaleString('ru-RU') : '—';
+
+  function toMeters(value, units) {
+    return units === 'mm' ? value / 1000 : value;
   }
-  function roomToForm(row){const rawA=row.querySelector('.room-allowance').value;return {type:row.querySelector('.room-type').value,lengthInput:row.querySelector('.room-length').value,widthInput:row.querySelector('.room-width').value,allowanceCm:rawA===''?NaN:n(rawA),comment:row.querySelector('.room-comment').value.trim()}}
-
-  function addApartment(data={}){
-    const node=clone('apartmentTpl').querySelector('.apartment');
-    node.querySelector('.apt-number').value=data.number||'';
-    node.querySelector('.apt-name').value=data.name||'';
-    node.querySelector('.apt-comment').value=data.comment||'';
-    const rooms=node.querySelector('.rooms');
-    (data.rooms?.length?data.rooms:[{}]).forEach(r=>addRoom(rooms,r));
-    node.querySelector('.add-room').onclick=()=>addRoom(rooms);
-    node.querySelector('.delete-apt').onclick=()=>node.remove();
-    node.querySelector('.copy-apt').onclick=()=>addApartment(apartmentToData(node));
-    el('apartments').appendChild(node);
-  }
-  function apartmentToData(node){return {number:node.querySelector('.apt-number').value.trim(),name:node.querySelector('.apt-name').value.trim(),comment:node.querySelector('.apt-comment').value.trim(),rooms:[...node.querySelectorAll('.room')].map(roomToForm)}}
-
-  function getSettings(){const allowanceCm=Math.max(0,n(el('allowanceDefault').value)||0);return {projectName:el('projectName').value.trim(),material:el('material').value.trim(),units:activeUnits(),rollWidths:parseRollWidths(),allowanceDefaultM:allowanceCm/100,mode:el('mode').value,rawAllowanceDef:el('allowanceDefault').value}}
-  function getApartments(settings){
-    return [...el('apartments').querySelectorAll('.apartment')].map((node,i)=>{
-      const raw=apartmentToData(node);const name=raw.name||raw.number||`Квартира ${i+1}`;
-      const rooms=raw.rooms.map((r,j)=>({type:r.type,length:mFromInput(r.lengthInput,settings.units),width:mFromInput(r.widthInput,settings.units),allowanceM:Number.isFinite(r.allowanceCm)&&r.allowanceCm>=0?r.allowanceCm/100:NaN,comment:r.comment,index:j})).filter(r=>Number.isFinite(r.length)&&r.length>0&&Number.isFinite(r.width)&&r.width>0);
-      return {...raw,name,rooms};
-    }).filter(a=>a.rooms.length);
-  }
-
-  function calculateRoom(room,allowanceM,widths,mode){
-    const cutL=room.length+2*allowanceM, cutW=room.width+2*allowanceM, roomArea=room.length*room.width;
-    let best=null;
-    widths.forEach(rw=>[[cutW,cutL],[cutL,cutW]].forEach(([across,along])=>{
-      if(across<=rw){const used=rw*along,waste=used-roomArea;const candidate={rollWidth:rw,cutLength:along,usedArea:used,waste,seams:0,strips:1};
-        if(!best||(mode==='waste'?candidate.waste<best.waste:candidate.waste<best.waste))best=candidate;
-      }
-    }));
-    if(!best){const rw=widths.at(-1);if(!rw)return null;const across=Math.min(cutL,cutW),along=Math.max(cutL,cutW),strips=Math.ceil(across/rw);const used=rw*along*strips;best={rollWidth:rw,cutLength:along,usedArea:used,waste:used-roomArea,seams:Math.max(0,strips-1),strips};}
-    return {...best,roomArea,cutL,cutW};
-  }
-
-  function calculate(){
-    const settings=getSettings();if(!settings.rollWidths.length)return show('Укажите хотя бы одну ширину рулона.',true);
-    const apartments=getApartments(settings);if(!apartments.length)return show('Добавьте помещение с корректной длиной и шириной.',true);
-    const rows=[],summary=new Map(),pieces=[];
-    apartments.forEach((apt,aptIndex)=>{
-      const markings=[];apt.rooms.forEach((room,roomIndex)=>{
-        const allowanceM=effectiveAllowance(room,settings.allowanceDefaultM);const calc=calculateRoom(room,allowanceM,settings.rollWidths,settings.mode);if(!calc)return;
-        const marking=`${apt.number||apt.name}-${String(roomIndex+1).padStart(2,'0')}`;markings.push(marking);
-        const r={marking,apartment:apt.name,type:room.type,lengthM:room.length,widthM:room.width,allowanceM,comment:room.comment||apt.comment,aptIndex,...calc};rows.push(r);
-        const s=summary.get(calc.rollWidth)||{rollWidth:calc.rollWidth,lengthM:0,area:0,apartments:new Set(),markings:[]};s.lengthM+=calc.cutLength*calc.strips;s.area+=calc.usedArea;s.apartments.add(apt.name);s.markings.push(marking);summary.set(calc.rollWidth,s);
-      });
-      if(markings.length)pieces.push({apartment:apt.name,count:markings.length,range:markings.length===1?markings[0]:`${markings[0]} — ${markings.at(-1)}`});
-    });
-    lastCalc={settings,rows,summary,pieces};render(lastCalc);save();show('Расчёт выполнен.');
-  }
-
-  function render(data){
-    const body=el('results');body.innerHTML='';
-    data.rows.forEach(r=>{
-      const tr=document.createElement('tr');if(r.aptIndex%2===1)tr.style.backgroundColor='#edf0f1';
-      tr.innerHTML=`<td>${r.marking}</td><td>${r.apartment}</td><td>${r.type}</td><td>${len(r.lengthM,data.settings.units)} × ${len(r.widthM,data.settings.units)}</td><td>${fmt(r.allowanceM*100)} см</td><td>${len(r.cutL,data.settings.units)} × ${len(r.cutW,data.settings.units)}</td><td>${len(r.rollWidth,data.settings.units)}</td><td>${len(r.cutLength,data.settings.units)}</td><td>${area(r.usedArea)}</td><td>${area(r.waste)}</td><td>${pct(r.waste,r.usedArea)}</td><td>${r.seams}</td><td>${r.comment||''}</td>`;
-      body.appendChild(tr);
-    });
-    const p=el('apartmentPieces');p.innerHTML='';data.pieces.forEach(x=>{const tr=document.createElement('tr');tr.innerHTML=`<td>${x.apartment}</td><td>${x.count}</td><td>${x.range}</td>`;p.appendChild(tr)});
-    const s=el('summary');s.innerHTML='';[...data.summary.values()].sort((a,b)=>a.rollWidth-b.rollWidth).forEach(x=>{const tr=document.createElement('tr');tr.innerHTML=`<td>${len(x.rollWidth,data.settings.units)}</td><td>${len(x.lengthM,data.settings.units)}</td><td>${area(x.area)}</td><td>${[...x.apartments].join(', ')}</td><td>${x.markings.join(', ')}</td>`;s.appendChild(tr)});
-  }
-
-  function save(){const project={settings:{projectName:el('projectName').value,material:el('material').value,units:el('units').value,rollWidths:el('rollWidths').value,allowanceDefault:el('allowanceDefault').value,mode:el('mode').value},apartments:[...el('apartments').querySelectorAll('.apartment')].map(apartmentToData)};localStorage.setItem(STORAGE_KEY,JSON.stringify(project))}
-  function load(){try{const project=JSON.parse(localStorage.getItem(STORAGE_KEY));if(!project)return addApartment();Object.entries(project.settings||{}).forEach(([k,v])=>{if(el(k))el(k).value=v});(project.apartments||[]).forEach(addApartment);if(!el('apartments').children.length)addApartment()}catch{addApartment()}}
-  function clearSettings(){el('projectName').value='';el('material').value='Линолеум';el('units').value='mm';el('rollWidths').value='1.5, 2, 2.5, 3, 3.5';el('allowanceDefault').value='5';el('mode').value='seams';save();show('Параметры сброшены.')}
-  function clearAll(){if(!confirm('Очистить параметры, квартиры и результаты?'))return;localStorage.removeItem(STORAGE_KEY);el('apartments').innerHTML='';el('results').innerHTML='';el('apartmentPieces').innerHTML='';el('summary').innerHTML='';lastCalc=null;clearSettings();addApartment();show('Все данные очищены.')}
-
-  async function downloadXlsx(){
-    if(!lastCalc)return show('Сначала выполните расчёт.',true);if(typeof ExcelJS==='undefined')return show('Не удалось загрузить модуль Excel.',true);
-    const {settings,rows,summary,pieces}=lastCalc,units=settings.units,toDisplay=m=>units==='mm'?Math.round(m*1000):Math.round(m*100)/100,lenFmt=units==='mm'?'#,##0 "мм"':'0.00 "м"',areaFmt='0.00 "м²"',pctFmt='0%';
-    const wb=new ExcelJS.Workbook();wb.creator='Линум';
-    const header=row=>{row.eachCell(c=>{c.font={bold:true,color:{argb:'FFFFFFFF'}};c.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FF5B686D'}};c.alignment={horizontal:'center',vertical:'middle',wrapText:true}})};
-    const widths=(ws,count)=>{for(let i=1;i<=count;i++){let max=10;ws.getColumn(i).eachCell({includeEmpty:false},c=>{const val=c.numFmt===pctFmt?`${Math.round(c.value*100)}%`:String(c.value??'');max=Math.max(max,val.length)});ws.getColumn(i).width=Math.min(max+2,45)}};
-    
-    // Лист 1: Результаты
-    const ws=wb.addWorksheet('Результаты',{views:[{state:'frozen',ySplit:1}]});
-    ws.addRow(['Маркировка','Квартира','Помещение','Длина','Ширина','Запас','С запасом','Ширина рулона','Метраж','Площадь','Остаток','%','Стыков','Комментарий']);
-    header(ws.getRow(1));let totalLen=0,totalArea=0,totalWaste=0;
-    rows.forEach(r=>{
-      const pctVal = r.usedArea > 0 ? (r.waste / r.usedArea) : 0;
-      const row=ws.addRow([r.marking,r.apartment,r.type,toDisplay(r.lengthM),toDisplay(r.widthM),r.allowanceM*100,`${len(r.cutL,units)} × ${len(r.cutW,units)}`,toDisplay(r.rollWidth),toDisplay(r.cutLength),r.usedArea,r.waste,pctVal,r.seams,r.comment]);
-      [4,5,8,9].forEach(i=>row.getCell(i).numFmt=lenFmt);row.getCell(6).numFmt='0.0 "см"';[10,11].forEach(i=>row.getCell(i).numFmt=areaFmt);
-      row.getCell(12).numFmt=pctFmt; row.getCell(14).alignment={wrapText:true};
-      if(r.aptIndex%2===1)row.eachCell({includeEmpty:true},c=>{if(!c.fill)c.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FFEDF0F1'}}});
-      totalLen+=toDisplay(r.cutLength*r.strips);totalArea+=r.usedArea;totalWaste+=r.waste;
-    });
-    const dataEnd=ws.rowCount;if(dataEnd>1){
-      const tr=ws.addRow(['','','','','','','','ИТОГО:',totalLen,totalArea,totalWaste,'','','']);
-      tr.eachCell(c=>{c.font={bold:true};c.border={top:{style:'double'}}});
-      tr.getCell(9).numFmt=lenFmt;tr.getCell(10).numFmt=areaFmt;tr.getCell(11).numFmt=areaFmt;
-      ws.addConditionalFormatting({ref:`K2:K${dataEnd}`,rules:[{type:'colorScale',cfvo:[{type:'min'},{type:'percentile',val:50},{type:'max'}],color:[{argb:'FF63BE7B'},{argb:'FFFFEB84'},{argb:'FFF8696B'}]}]});
-      ws.addConditionalFormatting({ref:`L2:L${dataEnd}`,rules:[{type:'colorScale',cfvo:[{type:'min'},{type:'percentile',val:50},{type:'max'}],color:[{argb:'FF63BE7B'},{argb:'FFFFEB84'},{argb:'FFF8696B'}]}]});
+  function fmtLen(valueMeters, units) {
+    if (!Number.isFinite(valueMeters)) return '—';
+    if (units === 'mm') {
+      return Math.round(valueMeters * 1000).toLocaleString('ru-RU') + ' мм';
     }
-    widths(ws,14);ws.getColumn(14).width=40;
+    return fmt(valueMeters) + ' м';
+  }
+
+  function parseRollWidths(str) {
+    return str.split(',').map(s => parseNum(s)).filter(n => Number.isFinite(n) && n > 0).sort((a,b)=>a-b);
+  }
+
+  function populateRoomTypeSelect(select) {
+    select.innerHTML = '';
+    ROOM_TYPES.forEach(t => {
+      const opt = document.createElement('option');
+      opt.value = t.code;
+      opt.textContent = t.name;
+      select.appendChild(opt);
+    });
+  }
+
+  function createRoom(container) {
+    const tpl = el('roomTpl').content.cloneNode(true);
+    const room = tpl.querySelector('.room');
+    const typeSelect = room.querySelector('.room-type');
+    populateRoomTypeSelect(typeSelect);
+    const customInput = room.querySelector('.room-custom');
+    const codeInput = room.querySelector('.room-code');
+
+    typeSelect.addEventListener('change', () => {
+      if (typeSelect.value === 'custom') {
+        customInput.hidden = false;
+        codeInput.hidden = false;
+      } else {
+        customInput.hidden = true;
+        codeInput.hidden = true;
+      }
+    });
+
+    room.querySelector('.delete-room').addEventListener('click', () => room.remove());
+    room.querySelector('.copy-room').addEventListener('click', () => {
+      const clone = createRoom(container);
+      clone.querySelector('.room-type').value = typeSelect.value;
+      clone.querySelector('.room-type').dispatchEvent(new Event('change'));
+      clone.querySelector('.room-custom').value = customInput.value;
+      clone.querySelector('.room-code').value = codeInput.value;
+      clone.querySelector('.room-length').value = room.querySelector('.room-length').value;
+      clone.querySelector('.room-width').value = room.querySelector('.room-width').value;
+      clone.querySelector('.room-comment').value = room.querySelector('.room-comment').value;
+    });
+
+    container.appendChild(room);
+    return room;
+  }
+
+  function createApartment() {
+    const tpl = el('apartmentTpl').content.cloneNode(true);
+    const apt = tpl.querySelector('.apartment');
+    const roomsContainer = apt.querySelector('.rooms');
+
+    apt.querySelector('.add-room').addEventListener('click', () => createRoom(roomsContainer));
+    apt.querySelector('.delete-apt').addEventListener('click', () => apt.remove());
+    apt.querySelector('.copy-apt').addEventListener('click', () => {
+      const clone = createApartment();
+      clone.querySelector('.apt-number').value = apt.querySelector('.apt-number').value;
+      clone.querySelector('.apt-name').value = apt.querySelector('.apt-name').value;
+      clone.querySelector('.apt-comment').value = apt.querySelector('.apt-comment').value;
+      const cloneRooms = clone.querySelector('.rooms');
+      roomsContainer.querySelectorAll('.room').forEach(r => {
+        const nr = createRoom(cloneRooms);
+        nr.querySelector('.room-type').value = r.querySelector('.room-type').value;
+        nr.querySelector('.room-type').dispatchEvent(new Event('change'));
+        nr.querySelector('.room-custom').value = r.querySelector('.room-custom').value;
+        nr.querySelector('.room-code').value = r.querySelector('.room-code').value;
+        nr.querySelector('.room-length').value = r.querySelector('.room-length').value;
+        nr.querySelector('.room-width').value = r.querySelector('.room-width').value;
+        nr.querySelector('.room-comment').value = r.querySelector('.room-comment').value;
+      });
+    });
+
+    el('apartments').appendChild(apt);
+    createRoom(roomsContainer);
+    return apt;
+  }
+
+  function roomTypeName(select, customInput) {
+    if (select.value === 'custom') {
+      return customInput.value.trim() || 'Своё помещение';
+    }
+    const t = ROOM_TYPES.find(t => t.code === select.value);
+    return t ? t.name : select.value;
+  }
+
+  function collectData(units) {
+    const apartments = [];
+    document.querySelectorAll('#apartments .apartment').forEach(apt => {
+      const number = apt.querySelector('.apt-number').value.trim();
+      const name = apt.querySelector('.apt-name').value.trim() || number || 'Квартира';
+      const comment = apt.querySelector('.apt-comment').value.trim();
+      const rooms = [];
+      apt.querySelectorAll('.room').forEach(r => {
+        const typeSelect = r.querySelector('.room-type');
+        const customInput = r.querySelector('.room-custom');
+        const codeInput = r.querySelector('.room-code');
+        const rawLength = parseNum(r.querySelector('.room-length').value);
+        const rawWidth = parseNum(r.querySelector('.room-width').value);
+        const roomComment = r.querySelector('.room-comment').value.trim();
+        if (!Number.isFinite(rawLength) || !Number.isFinite(rawWidth)) return;
+        rooms.push({
+          typeName: roomTypeName(typeSelect, customInput),
+          code: codeInput.value.trim(),
+          length: toMeters(rawLength, units),
+          width: toMeters(rawWidth, units),
+          comment: roomComment
+        });
+      });
+      if (rooms.length) apartments.push({ number, name, comment, rooms });
+    });
+    return apartments;
+  }
+
+  function calculateRoom(room, allowanceM, rollWidths, mode) {
+    const roomLenWithAllowance = room.length + allowanceM * 2;
+    const roomWidthWithAllowance = room.width + allowanceM * 2;
+    const area = room.length * room.width;
+
+    let best = null;
+    rollWidths.forEach(rw => {
+      [ [roomWidthWithAllowance, roomLenWithAllowance], [roomLenWithAllowance, roomWidthWithAllowance] ]
+        .forEach(([acrossRoll, alongRoll]) => {
+          if (acrossRoll <= rw) {
+            const cutLength = alongRoll;
+            const usedArea = rw * cutLength;
+            const waste = usedArea - area;
+            const seams = 0;
+            const candidate = { rollWidth: rw, cutLength, usedArea, waste, seams, withAllowance: true };
+            if (!best) { best = candidate; return; }
+            if (mode === 'waste') {
+              if (candidate.waste < best.waste) best = candidate;
+            } else {
+              if (candidate.seams < best.seams || (candidate.seams === best.seams && candidate.waste < best.waste)) best = candidate;
+            }
+          }
+        });
+    });
+
+    if (!best) {
+      const maxRw = rollWidths[rollWidths.length - 1] || 0;
+      const acrossRoll = Math.min(roomWidthWithAllowance, roomLenWithAllowance);
+      const alongRoll = Math.max(roomWidthWithAllowance, roomLenWithAllowance);
+      const stripWidth = maxRw > 0 ? maxRw : acrossRoll;
+      const stripsAcross = Math.ceil(acrossRoll / stripWidth);
+      const cutLength = alongRoll;
+      const usedArea = stripWidth * cutLength * stripsAcross;
+      const waste = usedArea - area;
+      best = { rollWidth: stripWidth, cutLength, usedArea, waste, seams: Math.max(0, stripsAcross - 1), withAllowance: true, multiStrip: stripsAcross };
+    }
+    return { area, ...best };
+  }
+
+  function renderResults(apartments, settings) {
+    const resultsBody = el('results');
+    const summaryBody = el('summary');
+    const apartmentPiecesBody = el('apartmentPieces');
+    resultsBody.innerHTML = '';
+    summaryBody.innerHTML = '';
+    if (apartmentPiecesBody) apartmentPiecesBody.innerHTML = '';
+
+    const units = settings.units;
+    const filterApt = el('filterApartment');
+    const filterRoom = el('filterRoom');
+    const filterWidth = el('filterWidth');
+    const aptSet = new Set(), roomSet = new Set(), widthSet = new Set();
+
+    const summaryMap = new Map();
+    const flatRows = [];
+    const apartmentPieces = [];
+    const resultsSheetRows = [];
+    const resultsSheetRowsRaw = [];
+    const cuttingRows = [];
+
+    apartments.forEach((apt, aptIndex) => {
+      const aptLabel = apt.number || apt.name;
+      let markingCounter = 1;
+      const markingsForApt = [];
+
+      apt.rooms.forEach(room => {
+        const calc = calculateRoom(room, settings.allowanceM, settings.rollWidths, settings.mode);
+        const marking = `${aptLabel}-${String(markingCounter++).padStart(2, '0')}`;
+        markingsForApt.push(marking);
+        const roomSizeText = `${fmtLen(room.length, units)}×${fmtLen(room.width, units)}`;
+        const withAllowanceText = calc.multiStrip
+          ? `${fmtLen(room.length + settings.allowanceM*2, units)}×${fmtLen(room.width + settings.allowanceM*2, units)} (${calc.multiStrip} полотна)`
+          : `${fmtLen(calc.cutLength, units)} по рулону`;
+        const roomLabel = room.typeName + (room.code ? ' ('+room.code+')' : '');
+        const rollWidthText = fmtLen(calc.rollWidth, units);
+        const cutLengthText = fmtLen(calc.cutLength, units);
+        const areaText = fmt(calc.usedArea) + ' м²';
+        const wasteText = fmt(calc.waste) + ' м²';
+        const commentText = room.comment || apt.comment || '';
+
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${marking}</td>
+          <td>${apt.name}</td>
+          <td>${roomLabel}</td>
+          <td>${roomSizeText}</td>
+          <td>${withAllowanceText}</td>
+          <td>${rollWidthText}</td>
+          <td>${rollWidthText}</td>
+          <td>${cutLengthText}</td>
+          <td>${areaText}</td>
+          <td>${wasteText}</td>
+          <td>${calc.seams || 0}</td>
+          <td>${commentText}</td>
+        `;
+        resultsBody.appendChild(tr);
+
+        aptSet.add(apt.name);
+        roomSet.add(room.typeName);
+        widthSet.add(rollWidthText);
+
+        const key = calc.rollWidth;
+        if (!summaryMap.has(key)) summaryMap.set(key, { totalLength: 0, totalArea: 0, apartments: new Set(), markings: [] });
+        const s = summaryMap.get(key);
+        s.totalLength += calc.cutLength * (calc.multiStrip || 1);
+        s.totalArea += calc.usedArea;
+        s.apartments.add(apt.name);
+        s.markings.push(marking);
+
+        flatRows.push({
+          marking, apartment: apt.name, room: roomLabel,
+          size: roomSizeText, rollWidth: calc.rollWidth, length: calc.cutLength,
+          area: calc.usedArea, waste: calc.waste, seams: calc.seams || 0,
+          comment: commentText
+        });
+
+        resultsSheetRows.push([
+          marking, apt.name, roomLabel, roomSizeText, withAllowanceText,
+          rollWidthText, rollWidthText, cutLengthText, areaText, wasteText, calc.seams || 0, commentText
+        ]);
+
+        resultsSheetRowsRaw.push({
+          marking, apartment: apt.name, room: roomLabel, aptIndex,
+          lengthM: room.length, widthM: room.width,
+          withAllowanceText,
+          rollWidthM: calc.rollWidth, cutLengthM: calc.cutLength,
+          multiStrip: calc.multiStrip || 1,
+          area: Math.round(calc.usedArea * 100) / 100,
+          waste: Math.round(calc.waste * 100) / 100,
+          seams: calc.seams || 0,
+          comment: commentText
+        });
+
+        cuttingRows.push({
+          marking, apartment: apt.name,
+          rollWidthNum: calc.rollWidth, rollWidthText, cutLengthText
+        });
+      });
+
+      if (markingsForApt.length) {
+        apartmentPieces.push({
+          apartment: apt.name,
+          number: aptLabel,
+          count: markingsForApt.length,
+          first: markingsForApt[0],
+          last: markingsForApt[markingsForApt.length - 1]
+        });
+      }
+    });
+
+    const summaryRowsArr = [];
+    [...summaryMap.entries()].sort((a,b)=>a[0]-b[0]).forEach(([rw, s]) => {
+      const rowValues = [
+        fmtLen(rw, units), fmtLen(s.totalLength, units), fmt(s.totalArea) + ' м²',
+        [...s.apartments].join(', '), s.markings.join(', ')
+      ];
+      summaryRowsArr.push(rowValues);
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${rowValues[0]}</td>
+        <td>${rowValues[1]}</td>
+        <td>${rowValues[2]}</td>
+        <td>${rowValues[3]}</td>
+        <td>${rowValues[4]}</td>
+      `;
+      summaryBody.appendChild(tr);
+    });
+
+    const apartmentPiecesRowsArr = [];
+    if (apartmentPiecesBody) {
+      apartmentPieces.forEach(ap => {
+        const rangeText = ap.count > 1 ? `${ap.first} — ${ap.last}` : ap.first;
+        apartmentPiecesRowsArr.push([ap.apartment, ap.count, rangeText]);
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${ap.apartment}</td>
+          <td>${ap.count}</td>
+          <td>${rangeText}</td>
+        `;
+        apartmentPiecesBody.appendChild(tr);
+      });
+    }
+
+    function fillSelect(select, values, current) {
+      const prev = current || select.value;
+      select.innerHTML = '<option value="">Все</option>';
+      [...values].sort().forEach(v => {
+        const opt = document.createElement('option');
+        opt.value = v; opt.textContent = v;
+        select.appendChild(opt);
+      });
+      select.value = prev;
+    }
+    fillSelect(filterApt, aptSet);
+    fillSelect(filterRoom, roomSet);
+    fillSelect(filterWidth, widthSet);
+
+    window.__linumLastCalc = {
+      apartments, settings, summaryMap, rows: flatRows, apartmentPieces,
+      resultsSheetRows, resultsSheetRowsRaw, cuttingRows, summaryRowsArr, apartmentPiecesRowsArr,
+      summaryMapRaw: summaryMap
+    };
+  }
+
+  function readSettings() {
+    return {
+      projectName: el('projectName').value.trim(),
+      material: el('material').value.trim(),
+      units: el('units').value,
+      rollWidths: parseRollWidths(el('rollWidths').value),
+      allowanceM: (parseNum(el('allowance').value) || 0) / 100,
+      mode: el('mode').value
+    };
+  }
+
+  function showMessage(text, isError) {
+    const msg = el('message');
+    msg.textContent = text;
+    msg.style.color = isError ? '#c53030' : '#2f855a';
+  }
+
+  function calculate() {
+    const settings = readSettings();
+    const apartments = collectData(settings.units);
+    if (!apartments.length) {
+      showMessage('Добавьте хотя бы одно помещение с размерами.', true);
+      return;
+    }
+    if (!settings.rollWidths.length) {
+      showMessage('Укажите хотя бы одну ширину рулона.', true);
+      return;
+    }
+    renderResults(apartments, settings);
+    showMessage('Готово: рассчитано ' + apartments.reduce((n,a)=>n+a.rooms.length,0) + ' помещений.');
+    const resultsSection = el('results')?.closest('section');
+    if (resultsSection) resultsSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  function saveProject() {
+    const settings = readSettings();
+    const data = { settings, apartments: collectData(settings.units) };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    showMessage('Параметры сохранены локально в браузере.');
+  }
+
+  function autosaveNow() {
+    try {
+      const settings = readSettings();
+      const data = { settings, apartments: collectData(settings.units) };
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    } catch (e) { /* ignore */ }
+  }
+
+  let autosaveTimer = null;
+  function autosaveDebounced() {
+    clearTimeout(autosaveTimer);
+    autosaveTimer = setTimeout(autosaveNow, 400);
+  }
+
+  function resetSettingsToDefault() {
+    el('projectName').value = '';
+    el('material').value = '';
+    el('units').value = 'm';
+    el('rollWidths').value = '2, 2.5, 3, 3.5, 4, 5';
+    el('allowance').value = '10';
+    el('mode').value = 'seams';
+  }
+
+  function resetApartmentsArea() {
+    el('apartments').innerHTML = '';
+    el('results').innerHTML = '';
+    el('summary').innerHTML = '';
+    if (el('apartmentPieces')) el('apartmentPieces').innerHTML = '';
+    ['filterApartment','filterRoom','filterWidth'].forEach(id => {
+      el(id).innerHTML = '<option value="">Все</option>';
+    });
+    window.__linumLastCalc = null;
+    createApartment();
+  }
+
+  function resetToBlank() {
+    resetApartmentsArea();
+    resetSettingsToDefault();
+  }
+
+  function clearAll() {
+    const ok = window.confirm('Удалить все данные проекта (квартиры, помещения, результаты) и начать заполнение с нуля? Сохранённые ранее параметры в браузере также будут удалены.');
+    if (!ok) return;
+    localStorage.removeItem(STORAGE_KEY);
+    resetToBlank();
+    showMessage('Все данные очищены. Можете начинать заполнение снова.', false);
+    autosaveNow();
+  }
+
+  function clearSettingsOnly() {
+    const ok = window.confirm('Очистить только параметры проекта (название, материал, единицы, ширины рулонов, запас, режим)? Квартиры и помещения останутся без изменений.');
+    if (!ok) return;
+    resetSettingsToDefault();
+    showMessage('Параметры проекта сброшены к значениям по умолчанию. Квартиры сохранены.', false);
+    autosaveNow();
+  }
+
+  function clearApartmentsOnly() {
+    const ok = window.confirm('Удалить все квартиры, помещения и результаты расчёта? Параметры проекта (название, единицы, рулоны и т.д.) останутся как есть.');
+    if (!ok) return;
+    resetApartmentsArea();
+    showMessage('Квартиры и результаты очищены. Можете добавлять новые квартиры. Параметры проекта сохранены.', false);
+    autosaveNow();
+  }
+
+  function loadProjectFromData(data) {
+    el('apartments').innerHTML = '';
+    el('projectName').value = data.settings?.projectName || '';
+    el('material').value = data.settings?.material || '';
+    const units = data.settings?.units === 'mm' ? 'mm' : 'm';
+    el('units').value = units;
+    if (data.settings?.rollWidths?.length) el('rollWidths').value = data.settings.rollWidths.join(', ');
+    if (data.settings?.allowanceM !== undefined) el('allowance').value = Math.round(data.settings.allowanceM * 100);
+    if (data.settings?.mode) el('mode').value = data.settings.mode;
+
+    if (data.apartments?.length) {
+      data.apartments.forEach(apt => {
+        const aptEl = createApartment();
+        aptEl.querySelectorAll('.room').forEach(r => r.remove());
+        aptEl.querySelector('.apt-number').value = apt.number || '';
+        aptEl.querySelector('.apt-name').value = apt.name || '';
+        aptEl.querySelector('.apt-comment').value = apt.comment || '';
+        const roomsContainer = aptEl.querySelector('.rooms');
+        apt.rooms.forEach(room => {
+          const r = createRoom(roomsContainer);
+          const typeMatch = ROOM_TYPES.find(t => t.name === room.typeName);
+          r.querySelector('.room-type').value = typeMatch ? typeMatch.code : 'custom';
+          r.querySelector('.room-type').dispatchEvent(new Event('change'));
+          if (!typeMatch) r.querySelector('.room-custom').value = room.typeName;
+          r.querySelector('.room-code').value = room.code || '';
+          r.querySelector('.room-length').value = units === 'mm' ? Math.round(room.length * 1000) : room.length;
+          r.querySelector('.room-width').value = units === 'mm' ? Math.round(room.width * 1000) : room.width;
+          r.querySelector('.room-comment').value = room.comment || '';
+        });
+      });
+    } else {
+      createApartment();
+    }
+  }
+
+  function loadProject() {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (!raw) { createApartment(); return; }
+      const data = JSON.parse(raw);
+      loadProjectFromData(data);
+    } catch (e) {
+      createApartment();
+    }
+  }
+
+  async function downloadCsv() {
+    const last = window.__linumLastCalc;
+    if (!last) { showMessage('Сначала выполните расчёт.', true); return; }
+    if (typeof ExcelJS === 'undefined') { showMessage('Не удалось загрузить модуль Excel. Проверьте подключение к интернету.', true); return; }
+    const units = last.settings.units;
+    const lenNumFmt = units === 'mm' ? '#,##0 "мм"' : '0.00 "м"';
+    const areaNumFmt = '0.00 "м²"';
+    const toDisplayLen = m => units === 'mm' ? Math.round(m * 1000) : Math.round(m * 100) / 100;
+
+    const wb = new ExcelJS.Workbook();
+    wb.creator = 'Линум';
+    wb.created = new Date();
+
+    function styleHeaderRow(row) {
+      row.eachCell(cell => {
+        cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF5B686D' } };
+        cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
+      });
+      row.height = 22;
+    }
+
+    function autoWidth(ws, colCount, extraRows) {
+      for (let c = 1; c <= colCount; c++) {
+        let max = 10;
+        ws.getColumn(c).eachCell({ includeEmpty: false }, cell => {
+          const v = cell.value == null ? '' : String(cell.value);
+          if (v.length > max) max = v.length;
+        });
+        ws.getColumn(c).width = Math.min(max + 2, 45);
+      }
+    }
+
+    // Лист 1: Результаты
+    const wsResults = wb.addWorksheet('Результаты', { views: [{ state: 'frozen', ySplit: 1 }] });
+    const resultsHeader = ['Маркировка','Квартира','Помещение','Длина','Ширина','С запасом','Ширина рулона','Метраж','Площадь','Остаток','Стыков','Комментарий'];
+    wsResults.addRow(resultsHeader);
+    styleHeaderRow(wsResults.getRow(1));
+
+    let totalArea = 0, totalWaste = 0, totalLength = 0;
+    const bandColors = ['FFFFFFFF', 'FFEDF0F1'];
+    (last.resultsSheetRowsRaw || []).forEach(r => {
+      const row = wsResults.addRow([
+        r.marking, r.apartment, r.room, toDisplayLen(r.lengthM), toDisplayLen(r.widthM), r.withAllowanceText,
+        toDisplayLen(r.rollWidthM), toDisplayLen(r.cutLengthM), r.area, r.waste, r.seams, r.comment
+      ]);
+      row.getCell(4).numFmt = lenNumFmt;
+      row.getCell(5).numFmt = lenNumFmt;
+      row.getCell(7).numFmt = lenNumFmt;
+      row.getCell(8).numFmt = lenNumFmt;
+      row.getCell(9).numFmt = areaNumFmt;
+      row.getCell(10).numFmt = areaNumFmt;
+      row.getCell(12).alignment = { wrapText: true };
+
+      const bandColor = bandColors[r.aptIndex % 2];
+      row.eachCell({ includeEmpty: true }, cell => {
+        if (!cell.fill) cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: bandColor } };
+      });
+
+      totalArea += r.area;
+      totalWaste += r.waste;
+      totalLength += toDisplayLen(r.cutLengthM);
+    });
+
+    const lastDataRow = wsResults.rowCount;
+    if (lastDataRow > 1) {
+      const totalRow = wsResults.addRow(['', '', '', '', '', '', 'ИТОГО:', totalLength, totalArea, totalWaste, '', '']);
+      totalRow.eachCell(cell => { cell.font = { bold: true }; cell.border = { top: { style: 'double' } }; });
+      totalRow.getCell(8).numFmt = lenNumFmt;
+      totalRow.getCell(9).numFmt = areaNumFmt;
+      totalRow.getCell(10).numFmt = areaNumFmt;
+
+      // Условное форматирование: колонка "Остаток" (10) — цветовая шкала зелёный→жёлтый→красный
+      wsResults.addConditionalFormatting({
+        ref: `J2:J${lastDataRow}`,
+        rules: [{
+          type: 'colorScale',
+          cfvo: [{ type: 'min' }, { type: 'percentile', val: 50 }, { type: 'max' }],
+          color: [{ argb: 'FF63BE7B' }, { argb: 'FFFFEB84' }, { argb: 'FFF8696B' }]
+        }]
+      });
+    }
+    autoWidth(wsResults, resultsHeader.length);
+    wsResults.getColumn(12).width = 40;
 
     // Лист 2: Куски по квартирам
-    const wp=wb.addWorksheet('Куски по квартирам',{views:[{state:'frozen',ySplit:1}]});
-    wp.addRow(['Квартира','Кол-во кусков','Диапазон маркировки']);header(wp.getRow(1));let totalPieces=0;
-    pieces.forEach(x=>{wp.addRow([x.apartment,x.count,x.range]);totalPieces+=x.count});
-    wp.addRow(['ИТОГО:',totalPieces,'']);widths(wp,3);
+    const wsPieces = wb.addWorksheet('Куски по квартирам', { views: [{ state: 'frozen', ySplit: 1 }] });
+    const piecesHeader = ['Квартира','Кол-во кусков','Диапазон маркировки'];
+    wsPieces.addRow(piecesHeader);
+    styleHeaderRow(wsPieces.getRow(1));
+    let totalPieces = 0;
+    (last.apartmentPiecesRowsArr || []).forEach(r => {
+      wsPieces.addRow(r);
+      totalPieces += Number(r[1]) || 0;
+    });
+    if (wsPieces.rowCount > 1) {
+      const totalRow = wsPieces.addRow(['ИТОГО:', totalPieces, '']);
+      totalRow.eachCell(cell => { cell.font = { bold: true }; cell.border = { top: { style: 'double' } }; });
+    }
+    autoWidth(wsPieces, piecesHeader.length);
 
     // Лист 3: Сводка для заказа
-    const wsum=wb.addWorksheet('Сводка для заказа',{views:[{state:'frozen',ySplit:1}]});
-    wsum.addRow(['Ширина рулона','Погонный метраж','Площадь','Квартиры','Маркировки для отрезки']);header(wsum.getRow(1));let sl=0,sa=0;
-    [...summary.values()].sort((a,b)=>a.rollWidth-b.rollWidth).forEach(x=>{
-      const row=wsum.addRow([toDisplay(x.rollWidth),toDisplay(x.lengthM),x.area,[...x.apartments].join(', '),x.markings.join(', ')]);
-      row.getCell(1).numFmt=lenFmt;row.getCell(2).numFmt=lenFmt;row.getCell(3).numFmt=areaFmt;sl+=toDisplay(x.lengthM);sa+=x.area;
+    const wsSummary = wb.addWorksheet('Сводка для заказа', { views: [{ state: 'frozen', ySplit: 1 }] });
+    const summaryHeader = ['Ширина рулона','Погонный метраж','Площадь','Квартиры','Маркировки для отрезки'];
+    wsSummary.addRow(summaryHeader);
+    styleHeaderRow(wsSummary.getRow(1));
+    let sumLength = 0, sumArea = 0;
+    [...last.summaryMapRaw.entries()].sort((a,b)=>a[0]-b[0]).forEach(([rw, s]) => {
+      const row = wsSummary.addRow([toDisplayLen(rw), toDisplayLen(s.totalLength), Math.round(s.totalArea * 100) / 100, [...s.apartments].join(', '), s.markings.join(', ')]);
+      row.getCell(1).numFmt = lenNumFmt;
+      row.getCell(2).numFmt = lenNumFmt;
+      row.getCell(3).numFmt = areaNumFmt;
+      row.getCell(4).alignment = { wrapText: true };
+      row.getCell(5).alignment = { wrapText: true };
+      sumLength += toDisplayLen(s.totalLength);
+      sumArea += s.totalArea;
     });
-    const sr=wsum.addRow(['ИТОГО:',sl,sa,'','']);sr.eachCell(c=>{c.font={bold:true};c.border={top:{style:'double'}}});
-    sr.getCell(2).numFmt=lenFmt;sr.getCell(3).numFmt=areaFmt;widths(wsum,5);wsum.getColumn(4).width=30;wsum.getColumn(5).width=42;
+    if (wsSummary.rowCount > 1) {
+      const totalRow = wsSummary.addRow(['ИТОГО:', sumLength, Math.round(sumArea * 100) / 100, '', '']);
+      totalRow.eachCell(cell => { cell.font = { bold: true }; cell.border = { top: { style: 'double' } }; });
+      totalRow.getCell(2).numFmt = lenNumFmt;
+      totalRow.getCell(3).numFmt = areaNumFmt;
+    }
+    autoWidth(wsSummary, summaryHeader.length);
+    wsSummary.getColumn(4).width = 30;
+    wsSummary.getColumn(5).width = 40;
 
-    // Лист 4: Схема раскроя
+    // Лист 4: Схема раскроя — упрощённая визуализация каждого куска на полотне рулона
     const wsScheme = wb.addWorksheet('Схема раскроя', { views: [{ showGridLines: false }] });
-    const SC_W=2.2, SC_H=12, SC_MM=150, MAX_C=22; let rCur=1;
-    if(rows.length>80){wsScheme.getRow(rCur).getCell(1).value='Показаны первые 80 кусков.';wsScheme.getRow(rCur).getCell(1).font={italic:true,color:{argb:'FF9AA5B1'}};rCur+=2;}
-    rows.slice(0,80).forEach(r=>{
-      const rwMm=units==='mm'?r.rollWidth*1000:r.rollWidth*1000, cMm=r.cutLength*1000, str=r.strips||1;
-      const cR=Math.max(2,Math.min(MAX_C,Math.round(rwMm/SC_MM))), cC=Math.max(2,Math.round(cMm/SC_MM));
-      const tr=wsScheme.getRow(rCur);tr.getCell(1).value=`${r.marking} — ${r.apartment}, ${r.type} (рулон ${rwMm} мм, отрез ${cMm} мм${str>1?', '+str+' полотна':''})`;tr.getCell(1).font={bold:true,size:11};rCur++;
-      const bSt=rCur;
-      for(let i=0;i<str;i++){
-        const off=i*(cR+1);
-        for(let rr=0;rr<cC;rr++){
-          const er=wsScheme.getRow(bSt+rr);er.height=SC_H;
-          for(let cc=0;cc<cR;cc++){
-            const c=er.getCell(off+cc+1);c.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FFBFD4D8'}};
-            c.border={top:{style:'thin',color:{argb:'FF5B686D'}},left:{style:'thin',color:{argb:'FF5B686D'}},right:{style:'thin',color:{argb:'FF5B686D'}},bottom:{style:'thin',color:{argb:'FF5B686D'}}};
+    const SCHEME_COL_W = 2.2;
+    const SCHEME_ROW_H = 12;
+    const SCALE_MM_PER_COL = 150;
+    const SCALE_MM_PER_ROW = 150;
+    const MAX_SCHEME_COLS = 22;
+    let schemeCursorRow = 1;
+    const MAX_SCHEME_ITEMS = 80;
+    const schemeItems = (last.resultsSheetRowsRaw || []);
+    if (schemeItems.length > MAX_SCHEME_ITEMS) {
+      const noteRow = wsScheme.getRow(schemeCursorRow);
+      noteRow.getCell(1).value = `Показаны первые ${MAX_SCHEME_ITEMS} из ${schemeItems.length} кусков. Полный список — на листе "Результаты".`;
+      noteRow.getCell(1).font = { italic: true, color: { argb: 'FF9AA5B1' } };
+      schemeCursorRow += 2;
+    }
+    schemeItems.slice(0, MAX_SCHEME_ITEMS).forEach(r => {
+      const rollWidthMm = units === 'mm' ? Math.round(r.rollWidthM * 1000) : Math.round(r.rollWidthM * 1000);
+      const cutLengthMm = Math.round(r.cutLengthM * 1000);
+      const stripsCount = r.multiStrip || 1;
+
+      const colsForRoll = Math.max(2, Math.min(MAX_SCHEME_COLS, Math.round(rollWidthMm / SCALE_MM_PER_COL)));
+      const rowsForCut = Math.max(2, Math.round(cutLengthMm / SCALE_MM_PER_ROW));
+
+      const titleRow = wsScheme.getRow(schemeCursorRow);
+      titleRow.getCell(1).value = `${r.marking} — ${r.apartment}, ${r.room} (рулон ${units === 'mm' ? rollWidthMm + ' мм' : (rollWidthMm/1000).toFixed(2) + ' м'}, отрез ${units === 'mm' ? cutLengthMm + ' мм' : (cutLengthMm/1000).toFixed(2) + ' м'}${stripsCount > 1 ? ', ' + stripsCount + ' полотна' : ''})`;
+      titleRow.getCell(1).font = { bold: true, size: 11 };
+      schemeCursorRow += 1;
+
+      const blockStartRow = schemeCursorRow;
+      for (let stripIdx = 0; stripIdx < stripsCount; stripIdx++) {
+        const colOffset = stripIdx * (colsForRoll + 1);
+        for (let rr = 0; rr < rowsForCut; rr++) {
+          const excelRow = wsScheme.getRow(blockStartRow + rr);
+          excelRow.height = SCHEME_ROW_H;
+          for (let cc = 0; cc < colsForRoll; cc++) {
+            const cell = excelRow.getCell(colOffset + cc + 1);
+            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFBFD4D8' } };
+            cell.border = {
+              top: { style: 'thin', color: { argb: 'FF5B686D' } },
+              left: { style: 'thin', color: { argb: 'FF5B686D' } },
+              right: { style: 'thin', color: { argb: 'FF5B686D' } },
+              bottom: { style: 'thin', color: { argb: 'FF5B686D' } }
+            };
           }
         }
-        const lc=wsScheme.getRow(bSt).getCell(off+1);lc.value=str>1?`Полотно ${i+1}`:r.marking;lc.font={bold:true,size:9,color:{argb:'FF1F2933'}};lc.alignment={wrapText:true,vertical:'top'};
+        const labelCell = wsScheme.getRow(blockStartRow).getCell(colOffset + 1);
+        labelCell.value = stripsCount > 1 ? `Полотно ${stripIdx + 1}` : r.marking;
+        labelCell.font = { bold: true, size: 9, color: { argb: 'FF1F2933' } };
+        labelCell.alignment = { wrapText: true, vertical: 'top' };
       }
-      rCur=bSt+cC+2;
-    });
-    for(let c=1;c<=MAX_C*2+2;c++)wsScheme.getColumn(c).width=SC_W;
 
-    const buffer=await wb.xlsx.writeBuffer(),a=document.createElement('a');a.href=URL.createObjectURL(new Blob([buffer],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}));a.download=`${settings.projectName||'linum'}_zakaz.xlsx`;a.click();URL.revokeObjectURL(a.href);
+      schemeCursorRow = blockStartRow + rowsForCut + 2;
+    });
+
+    for (let c = 1; c <= MAX_SCHEME_COLS * 2 + 2; c++) {
+      wsScheme.getColumn(c).width = SCHEME_COL_W;
+    }
+
+    const fileName = (last.settings.projectName || 'linum') + '_zakaz.xlsx';
+    const buffer = await wb.xlsx.writeBuffer();
+    const blob = new Blob([buffer], { type: 'application/octet-stream' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = fileName;
+    link.click();
+    URL.revokeObjectURL(link.href);
   }
 
-  el('addApartment').onclick=()=>addApartment();el('calculate').onclick=calculate;el('saveProject').onclick=()=>{save();show('Данные сохранены в браузере.')};el('clearSettings').onclick=clearSettings;el('clearAll').onclick=clearAll;el('downloadXlsx').onclick=downloadXlsx;el('printBtn').onclick=()=>window.print();load();
+  function isAppsScriptConfigured() {
+    return !!APPS_SCRIPT_URL && APPS_SCRIPT_URL.indexOf('https://') === 0;
+  }
+
+  async function exportSheets() {
+    const last = window.__linumLastCalc;
+    if (!last) { showMessage('Сначала выполните расчёт.', true); return; }
+    if (!isAppsScriptConfigured()) {
+      showMessage('Функция экспорта в Google таблицы требует подключения скрипта (см. google-apps-script/Code.gs и README).', true);
+      return;
+    }
+    const id = 'linum-' + Date.now();
+    const dateISO = new Date().toISOString();
+    const payload = {
+      id, dateISO,
+      settings: last.settings,
+      apartments: collectData(last.settings.units),
+      rows: last.rows,
+      resultsRows: last.resultsSheetRows,
+      cuttingRows: last.cuttingRows,
+      summaryRows: last.summaryRowsArr,
+      apartmentPiecesRows: last.apartmentPiecesRowsArr
+    };
+    showMessage('Сохраняется в Google таблицу…', false);
+    try {
+      const resp = await fetch(APPS_SCRIPT_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify(payload)
+      });
+      const data = await resp.json();
+      if (data.ok) {
+        showMessage('Сохранено в архив и на листы «Результаты», «Карта раскроя», «Куски по квартирам», «Сводка для заказа» (' + new Date(data.dateISO).toLocaleString('ru-RU') + ').', false);
+        refreshArchiveList();
+      } else {
+        showMessage('Ошибка сохранения: ' + (data.error || 'неизвестная ошибка'), true);
+      }
+    } catch (err) {
+      showMessage('Не удалось связаться с Google таблицей. Проверьте адрес и настройки доступа веб-аппа.', true);
+    }
+  }
+
+  async function refreshArchiveList() {
+    const select = el('archiveSelect');
+    if (!select) return;
+    if (!isAppsScriptConfigured()) {
+      select.innerHTML = '<option value="">Архив не настроен</option>';
+      return;
+    }
+    select.innerHTML = '<option value="">Загрузка…</option>';
+    try {
+      const resp = await fetch(APPS_SCRIPT_URL + '?action=list');
+      const data = await resp.json();
+      if (!data.ok) { select.innerHTML = '<option value="">Ошибка загрузки</option>'; return; }
+      if (!data.items.length) { select.innerHTML = '<option value="">Архив пуст</option>'; return; }
+      select.innerHTML = '';
+      data.items.forEach(item => {
+        const opt = document.createElement('option');
+        opt.value = item.id;
+        const dt = new Date(item.dateISO).toLocaleString('ru-RU');
+        opt.textContent = dt + (item.projectName ? ' — ' + item.projectName : '');
+        select.appendChild(opt);
+      });
+    } catch (err) {
+      select.innerHTML = '<option value="">Нет связи с архивом</option>';
+    }
+  }
+
+  async function loadArchiveItem() {
+    const select = el('archiveSelect');
+    if (!select || !select.value) { showMessage('Выберите сохранённый расчёт из списка.', true); return; }
+    if (!isAppsScriptConfigured()) { showMessage('Архив не настроен.', true); return; }
+    try {
+      const resp = await fetch(APPS_SCRIPT_URL + '?action=load&id=' + encodeURIComponent(select.value));
+      const data = await resp.json();
+      if (!data.ok) { showMessage('Не удалось загрузить расчёт: ' + (data.error || ''), true); return; }
+      loadProjectFromData({ settings: data.settings, apartments: data.apartments });
+      showMessage('Загружен расчёт от ' + new Date(data.dateISO).toLocaleString('ru-RU') + '. Отредактируйте и нажмите «Выгрузить в Google таблицы», чтобы сохранить как новую версию.', false);
+      autosaveNow();
+    } catch (err) {
+      showMessage('Ошибка связи с архивом.', true);
+    }
+  }
+
+  document.addEventListener('DOMContentLoaded', () => {
+    if (el('addApartmentBottom')) el('addApartmentBottom').addEventListener('click', createApartment);
+    if (el('calculateBottom')) el('calculateBottom').addEventListener('click', calculate);
+    el('saveProject').addEventListener('click', saveProject);
+    if (el('clearSettings')) el('clearSettings').addEventListener('click', clearSettingsOnly);
+    if (el('clearApartments')) el('clearApartments').addEventListener('click', clearApartmentsOnly);
+    el('clearAll').addEventListener('click', clearAll);
+    el('downloadCsv').addEventListener('click', downloadCsv);
+    el('exportSheets').addEventListener('click', exportSheets);
+    el('printBtn').addEventListener('click', () => window.print());
+    if (el('refreshArchive')) el('refreshArchive').addEventListener('click', refreshArchiveList);
+    if (el('loadArchive')) el('loadArchive').addEventListener('click', loadArchiveItem);
+
+    el('filterApartment').addEventListener('change', applyFilters);
+    el('filterRoom').addEventListener('change', applyFilters);
+    el('filterWidth').addEventListener('change', applyFilters);
+
+    function applyFilters() {
+      const aVal = el('filterApartment').value;
+      const rVal = el('filterRoom').value;
+      const wVal = el('filterWidth').value;
+      document.querySelectorAll('#results tr').forEach(tr => {
+        const cells = tr.children;
+        const aptName = cells[1]?.textContent || '';
+        const roomName = (cells[2]?.textContent || '').split(' (')[0];
+        const rollWidth = cells[5]?.textContent || '';
+        const show = (!aVal || aptName === aVal) && (!rVal || roomName === rVal) && (!wVal || rollWidth === wVal);
+        tr.style.display = show ? '' : 'none';
+      });
+    }
+
+    loadProject();
+    refreshArchiveList();
+
+    document.addEventListener('input', autosaveDebounced);
+    document.addEventListener('change', autosaveDebounced);
+    const apartmentsObserver = new MutationObserver(() => autosaveDebounced());
+    apartmentsObserver.observe(el('apartments'), { childList: true, subtree: true });
+  });
 })();
