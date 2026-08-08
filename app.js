@@ -202,6 +202,7 @@
     const flatRows = [];
     const apartmentPieces = [];
     const resultsSheetRows = [];
+    const resultsSheetRowsRaw = [];
     const cuttingRows = [];
 
     apartments.forEach(apt => {
@@ -264,6 +265,17 @@
           marking, apt.name, roomLabel, roomSizeText, withAllowanceText,
           rollWidthText, rollWidthText, cutLengthText, areaText, wasteText, calc.seams || 0, commentText
         ]);
+
+        resultsSheetRowsRaw.push({
+          marking, apartment: apt.name, room: roomLabel,
+          lengthM: room.length, widthM: room.width,
+          withAllowanceText,
+          rollWidthM: calc.rollWidth, cutLengthM: calc.cutLength,
+          area: Math.round(calc.usedArea * 100) / 100,
+          waste: Math.round(calc.waste * 100) / 100,
+          seams: calc.seams || 0,
+          comment: commentText
+        });
 
         cuttingRows.push({
           marking, apartment: apt.name,
@@ -331,7 +343,8 @@
 
     window.__linumLastCalc = {
       apartments, settings, summaryMap, rows: flatRows, apartmentPieces,
-      resultsSheetRows, cuttingRows, summaryRowsArr, apartmentPiecesRowsArr
+      resultsSheetRows, resultsSheetRowsRaw, cuttingRows, summaryRowsArr, apartmentPiecesRowsArr,
+      summaryMapRaw: summaryMap
     };
   }
 
@@ -487,47 +500,134 @@
     }
   }
 
-  function downloadCsv() {
+  async function downloadCsv() {
     const last = window.__linumLastCalc;
     if (!last) { showMessage('Сначала выполните расчёт.', true); return; }
-    if (typeof XLSX === 'undefined') { showMessage('Не удалось загрузить модуль Excel. Проверьте подключение к интернету.', true); return; }
+    if (typeof ExcelJS === 'undefined') { showMessage('Не удалось загрузить модуль Excel. Проверьте подключение к интернету.', true); return; }
     const units = last.settings.units;
+    const lenNumFmt = units === 'mm' ? '#,##0 "мм"' : '0.00 "м"';
+    const areaNumFmt = '0.00 "м²"';
+    const toDisplayLen = m => units === 'mm' ? Math.round(m * 1000) : Math.round(m * 100) / 100;
 
-    const resultsHeader = ['Маркировка','Квартира','Помещение','Размер','С запасом','рулон','Полос','Метраж','Площадь','Остаток','Стыков','Комментарий'];
-    const resultsSheetData = [resultsHeader, ...last.resultsSheetRows];
+    const wb = new ExcelJS.Workbook();
+    wb.creator = 'Линум';
+    wb.created = new Date();
 
-    const piecesHeader = ['Квартира','Кол-во кусков','Диапазон маркировки'];
-    const piecesSheetData = [piecesHeader, ...last.apartmentPiecesRowsArr];
-
-    const summaryHeader = ['Ширина рулона','Погонный метраж','Площадь','Квартиры','Маркировки для отрезки'];
-    const summarySheetData = [summaryHeader, ...last.summaryRowsArr];
-
-    const wb = XLSX.utils.book_new();
-    const wsResults = XLSX.utils.aoa_to_sheet(resultsSheetData);
-    const wsPieces = XLSX.utils.aoa_to_sheet(piecesSheetData);
-    const wsSummary = XLSX.utils.aoa_to_sheet(summarySheetData);
-
-    function autoWidth(ws, data) {
-      const widths = data[0].map((_, colIdx) => {
-        let max = 8;
-        data.forEach(row => {
-          const val = row[colIdx] == null ? '' : String(row[colIdx]);
-          if (val.length > max) max = val.length;
-        });
-        return { wch: Math.min(max + 2, 45) };
+    function styleHeaderRow(row) {
+      row.eachCell(cell => {
+        cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF5B686D' } };
+        cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
       });
-      ws['!cols'] = widths;
+      row.height = 22;
     }
-    autoWidth(wsResults, resultsSheetData);
-    autoWidth(wsPieces, piecesSheetData);
-    autoWidth(wsSummary, summarySheetData);
 
-    XLSX.utils.book_append_sheet(wb, wsResults, 'Результаты');
-    XLSX.utils.book_append_sheet(wb, wsPieces, 'Куски по квартирам');
-    XLSX.utils.book_append_sheet(wb, wsSummary, 'Сводка для заказа');
+    function autoWidth(ws, colCount, extraRows) {
+      for (let c = 1; c <= colCount; c++) {
+        let max = 10;
+        ws.getColumn(c).eachCell({ includeEmpty: false }, cell => {
+          const v = cell.value == null ? '' : String(cell.value);
+          if (v.length > max) max = v.length;
+        });
+        ws.getColumn(c).width = Math.min(max + 2, 45);
+      }
+    }
+
+    // Лист 1: Результаты
+    const wsResults = wb.addWorksheet('Результаты', { views: [{ state: 'frozen', ySplit: 1 }] });
+    const resultsHeader = ['Маркировка','Квартира','Помещение','Длина','Ширина','С запасом','Ширина рулона','Метраж','Площадь','Остаток','Стыков','Комментарий'];
+    wsResults.addRow(resultsHeader);
+    styleHeaderRow(wsResults.getRow(1));
+
+    let totalArea = 0, totalWaste = 0, totalLength = 0;
+    (last.resultsSheetRowsRaw || []).forEach(r => {
+      const row = wsResults.addRow([
+        r.marking, r.apartment, r.room, toDisplayLen(r.lengthM), toDisplayLen(r.widthM), r.withAllowanceText,
+        toDisplayLen(r.rollWidthM), toDisplayLen(r.cutLengthM), r.area, r.waste, r.seams, r.comment
+      ]);
+      row.getCell(4).numFmt = lenNumFmt;
+      row.getCell(5).numFmt = lenNumFmt;
+      row.getCell(7).numFmt = lenNumFmt;
+      row.getCell(8).numFmt = lenNumFmt;
+      row.getCell(9).numFmt = areaNumFmt;
+      row.getCell(10).numFmt = areaNumFmt;
+      row.getCell(12).alignment = { wrapText: true };
+      totalArea += r.area;
+      totalWaste += r.waste;
+      totalLength += toDisplayLen(r.cutLengthM);
+    });
+
+    const lastDataRow = wsResults.rowCount;
+    if (lastDataRow > 1) {
+      const totalRow = wsResults.addRow(['', '', '', '', '', '', 'ИТОГО:', totalLength, totalArea, totalWaste, '', '']);
+      totalRow.eachCell(cell => { cell.font = { bold: true }; cell.border = { top: { style: 'double' } }; });
+      totalRow.getCell(8).numFmt = lenNumFmt;
+      totalRow.getCell(9).numFmt = areaNumFmt;
+      totalRow.getCell(10).numFmt = areaNumFmt;
+
+      // Условное форматирование: колонка "Остаток" (10) — цветовая шкала зелёный→жёлтый→красный
+      wsResults.addConditionalFormatting({
+        ref: `J2:J${lastDataRow}`,
+        rules: [{
+          type: 'colorScale',
+          cfvo: [{ type: 'min' }, { type: 'percentile', val: 50 }, { type: 'max' }],
+          color: [{ argb: 'FF63BE7B' }, { argb: 'FFFFEB84' }, { argb: 'FFF8696B' }]
+        }]
+      });
+    }
+    autoWidth(wsResults, resultsHeader.length);
+    wsResults.getColumn(12).width = 40;
+
+    // Лист 2: Куски по квартирам
+    const wsPieces = wb.addWorksheet('Куски по квартирам', { views: [{ state: 'frozen', ySplit: 1 }] });
+    const piecesHeader = ['Квартира','Кол-во кусков','Диапазон маркировки'];
+    wsPieces.addRow(piecesHeader);
+    styleHeaderRow(wsPieces.getRow(1));
+    let totalPieces = 0;
+    (last.apartmentPiecesRowsArr || []).forEach(r => {
+      wsPieces.addRow(r);
+      totalPieces += Number(r[1]) || 0;
+    });
+    if (wsPieces.rowCount > 1) {
+      const totalRow = wsPieces.addRow(['ИТОГО:', totalPieces, '']);
+      totalRow.eachCell(cell => { cell.font = { bold: true }; cell.border = { top: { style: 'double' } }; });
+    }
+    autoWidth(wsPieces, piecesHeader.length);
+
+    // Лист 3: Сводка для заказа
+    const wsSummary = wb.addWorksheet('Сводка для заказа', { views: [{ state: 'frozen', ySplit: 1 }] });
+    const summaryHeader = ['Ширина рулона','Погонный метраж','Площадь','Квартиры','Маркировки для отрезки'];
+    wsSummary.addRow(summaryHeader);
+    styleHeaderRow(wsSummary.getRow(1));
+    let sumLength = 0, sumArea = 0;
+    [...last.summaryMapRaw.entries()].sort((a,b)=>a[0]-b[0]).forEach(([rw, s]) => {
+      const row = wsSummary.addRow([toDisplayLen(rw), toDisplayLen(s.totalLength), Math.round(s.totalArea * 100) / 100, [...s.apartments].join(', '), s.markings.join(', ')]);
+      row.getCell(1).numFmt = lenNumFmt;
+      row.getCell(2).numFmt = lenNumFmt;
+      row.getCell(3).numFmt = areaNumFmt;
+      row.getCell(4).alignment = { wrapText: true };
+      row.getCell(5).alignment = { wrapText: true };
+      sumLength += toDisplayLen(s.totalLength);
+      sumArea += s.totalArea;
+    });
+    if (wsSummary.rowCount > 1) {
+      const totalRow = wsSummary.addRow(['ИТОГО:', sumLength, Math.round(sumArea * 100) / 100, '', '']);
+      totalRow.eachCell(cell => { cell.font = { bold: true }; cell.border = { top: { style: 'double' } }; });
+      totalRow.getCell(2).numFmt = lenNumFmt;
+      totalRow.getCell(3).numFmt = areaNumFmt;
+    }
+    autoWidth(wsSummary, summaryHeader.length);
+    wsSummary.getColumn(4).width = 30;
+    wsSummary.getColumn(5).width = 40;
 
     const fileName = (last.settings.projectName || 'linum') + '_zakaz.xlsx';
-    XLSX.writeFile(wb, fileName);
+    const buffer = await wb.xlsx.writeBuffer();
+    const blob = new Blob([buffer], { type: 'application/octet-stream' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = fileName;
+    link.click();
+    URL.revokeObjectURL(link.href);
   }
 
   function isAppsScriptConfigured() {
