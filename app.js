@@ -490,23 +490,44 @@
   function downloadCsv() {
     const last = window.__linumLastCalc;
     if (!last) { showMessage('Сначала выполните расчёт.', true); return; }
+    if (typeof XLSX === 'undefined') { showMessage('Не удалось загрузить модуль Excel. Проверьте подключение к интернету.', true); return; }
     const units = last.settings.units;
-    const rows = [['Ширина рулона','Погонный метраж','Площадь','Помещений','Маркировки']];
-    [...last.summaryMap.entries()].sort((a,b)=>a[0]-b[0]).forEach(([rw, s]) => {
-      rows.push([fmtLen(rw, units), fmtLen(s.totalLength, units), fmt(s.totalArea) + ' м²', [...s.apartments].join('; '), s.markings.join('; ')]);
-    });
-    rows.push([]);
-    rows.push(['Квартира','Кол-во кусков','Диапазон маркировки']);
-    (last.apartmentPieces || []).forEach(ap => {
-      const rangeText = ap.count > 1 ? `${ap.first} - ${ap.last}` : ap.first;
-      rows.push([ap.apartment, ap.count, rangeText]);
-    });
-    const csv = rows.map(r => r.map(c => `"${String(c).replace(/"/g,'""')}"`).join(';')).join('\n');
-    const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement('a');
-    link.href = URL.createObjectURL(blob);
-    link.download = (last.settings.projectName || 'linum') + '_zakaz.csv';
-    link.click();
+
+    const resultsHeader = ['Маркировка','Квартира','Помещение','Размер','С запасом','рулон','Полос','Метраж','Площадь','Остаток','Стыков','Комментарий'];
+    const resultsSheetData = [resultsHeader, ...last.resultsSheetRows];
+
+    const piecesHeader = ['Квартира','Кол-во кусков','Диапазон маркировки'];
+    const piecesSheetData = [piecesHeader, ...last.apartmentPiecesRowsArr];
+
+    const summaryHeader = ['Ширина рулона','Погонный метраж','Площадь','Квартиры','Маркировки для отрезки'];
+    const summarySheetData = [summaryHeader, ...last.summaryRowsArr];
+
+    const wb = XLSX.utils.book_new();
+    const wsResults = XLSX.utils.aoa_to_sheet(resultsSheetData);
+    const wsPieces = XLSX.utils.aoa_to_sheet(piecesSheetData);
+    const wsSummary = XLSX.utils.aoa_to_sheet(summarySheetData);
+
+    function autoWidth(ws, data) {
+      const widths = data[0].map((_, colIdx) => {
+        let max = 8;
+        data.forEach(row => {
+          const val = row[colIdx] == null ? '' : String(row[colIdx]);
+          if (val.length > max) max = val.length;
+        });
+        return { wch: Math.min(max + 2, 45) };
+      });
+      ws['!cols'] = widths;
+    }
+    autoWidth(wsResults, resultsSheetData);
+    autoWidth(wsPieces, piecesSheetData);
+    autoWidth(wsSummary, summarySheetData);
+
+    XLSX.utils.book_append_sheet(wb, wsResults, 'Результаты');
+    XLSX.utils.book_append_sheet(wb, wsPieces, 'Куски по квартирам');
+    XLSX.utils.book_append_sheet(wb, wsSummary, 'Сводка для заказа');
+
+    const fileName = (last.settings.projectName || 'linum') + '_zakaz.xlsx';
+    XLSX.writeFile(wb, fileName);
   }
 
   function isAppsScriptConfigured() {
