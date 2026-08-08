@@ -1,171 +1,76 @@
 <!doctype html>
 <html lang="ru">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Линум — расчёт линолеума</title>
-<link rel="stylesheet" href="style.css">
-<script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Линум — расчёт линолеума</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
 </head>
 <body>
 <header>
-  <div><b>Линум</b><span>Расчёт линолеума для квартир</span></div>
+  <div class="brand"><b>Линум</b><span>Расчёт линолеума для квартир</span></div>
   <nav class="topnav">
     <a href="index.html" class="active">Калькулятор</a>
     <a href="instructions.html">Инструкция</a>
   </nav>
   <button id="printBtn" class="secondary">Печать</button>
 </header>
+
 <main>
   <section class="card">
     <h1>Проект и параметры</h1>
     <div class="grid settings">
-      <label><span class="label-text">Название проекта</span><input id="projectName" placeholder="Например, ЖК Троицкая"></label>
-      <label><span class="label-text">Линолеум / артикул</span><input id="material" placeholder="Название или артикул"></label>
+      <label><span class="label-text">Название проекта</span><input id="projectName" value="" placeholder="Например, ЖК Троицкая"></label>
+      <label><span class="label-text">Линолеум / артикул</span><input id="material" value="Линолеум" placeholder="Название или артикул"></label>
       <label><span class="label-text">Единицы размеров помещений</span>
-        <select id="units">
-          <option value="m">Метры (м)</option>
-          <option value="mm">Миллиметры (мм)</option>
-        </select>
+        <select id="units"><option value="mm">Миллиметры (мм)</option><option value="m">Метры (м)</option></select>
       </label>
-      <label><span class="label-text">Ширины рулонов, м</span><input id="rollWidths" value="2, 2.5, 3, 3.5, 4, 5"></label>
-      <label><span class="label-text">Запас с каждой стороны, см</span><input id="allowance" type="number" min="0" step="1" value="10"></label>
+      <label><span class="label-text">Ширины рулонов, м</span><input id="rollWidths" value="1.5, 2, 2.5, 3, 3.5"></label>
+      <label><span class="label-text">Запас по умолчанию, см</span><input id="allowanceDefault" type="number" min="0" step="0.5" value="0"></label>
       <label><span class="label-text">Режим подбора</span>
-        <select id="mode">
-          <option value="seams">Минимум стыков</option>
-          <option value="waste">Минимум отходов</option>
-        </select>
+        <select id="mode"><option value="seams">Минимум стыков</option><option value="waste">Минимум отходов</option></select>
       </label>
     </div>
-    <p class="settings-hint">Единицы измерения влияют на ввод длины/ширины помещений и на результаты расчёта. Ширины рулонов указываются всегда в метрах через запятую.</p>
-    <div class="actions">
-      <button id="saveProject">Сохранить параметры</button>
-      <button id="clearSettings" class="secondary">Очистить параметры</button>
-      <button id="clearAll" class="danger">Очистить всё</button>
-    </div>
-    <small>Все данные сохраняются автоматически в этом браузере — можно закрыть вкладку или обновить страницу, ничего не потеряется. Актуально до нажатия одной из кнопок очистки.</small>
+    <p class="hint">Индивидуальный запас задаётся у помещения. Если он не заполнен, применяется запас по умолчанию. При значении 0 размеры не увеличиваются.</p>
+    <div class="actions"><button id="saveProject" class="secondary">Сохранить параметры</button><button id="clearSettings" class="secondary">Очистить параметры</button><button id="clearAll" class="danger">Очистить всё</button></div>
+    <p id="message" class="message" aria-live="polite"></p>
   </section>
 
   <section class="card">
-    <div class="section-head">
-      <h2>Архив расчётов (Google таблица)</h2>
-      <button id="refreshArchive" class="secondary">↓ Обновить список</button>
-    </div>
-    <div class="filters">
-      <select id="archiveSelect"><option value="">Архив не загружен</option></select>
-      <button id="loadArchive" class="primary">Загрузить выбранный расчёт</button>
-    </div>
-    <small>Сохранённые расчёты хранятся в Google таблице после нажатия «Выгрузить в Google таблицы» в конце страницы. Выберите дату из списка, чтобы вернуть старый расчёт для редактирования.</small>
-  </section>
-
-  <section class="card">
-    <div class="section-head">
-      <h2>Квартиры и помещения</h2>
-    </div>
+    <div class="section-head"><h2>Квартиры и помещения</h2></div>
     <div id="apartments"></div>
-    <div class="actions bottom-actions">
-      <button id="addApartmentBottom" class="secondary">+ Добавить квартиру</button>
-      <button id="clearApartments" class="secondary">Очистить квартиры</button>
-      <button id="calculateBottom" class="primary">Рассчитать</button>
-    </div>
+    <div class="actions bottom-actions"><button id="addApartment" class="secondary">+ Добавить квартиру</button><button id="calculate" class="primary">Рассчитать</button></div>
   </section>
 
   <section class="card">
-    <div class="section-head">
-      <h2>Результаты расчёта</h2>
-      <div class="filters">
-        <select id="filterApartment"><option value="">Все квартиры</option></select>
-        <select id="filterRoom"><option value="">Все помещения</option></select>
-        <select id="filterWidth"><option value="">Все ширины</option></select>
-      </div>
-    </div>
-    <div class="table-wrap">
-      <table>
-        <thead>
-          <tr>
-            <th>Маркировка</th>
-            <th>Квартира</th>
-            <th>Помещение</th>
-            <th>Размер</th>
-            <th>С запасом</th>
-            <th>рулон</th>
-            <th>Полос</th>
-            <th>Метраж</th>
-            <th>Площадь</th>
-            <th>Остаток</th>
-            <th>Стыков</th>
-            <th>Комментарий</th>
-          </tr>
-        </thead>
-        <tbody id="results"></tbody>
-      </table>
-    </div>
+    <div class="section-head"><h2>Результаты расчёта</h2></div>
+    <div class="table-wrap"><table id="resultsTable">
+      <thead><tr><th>Маркировка</th><th>Квартира</th><th>Помещение</th><th>Размер</th><th>Запас</th><th>С запасом</th><th>Рулон</th><th>Метраж</th><th>Площадь</th><th>Остаток</th><th>Стыков</th><th>Комментарий</th></tr></thead>
+      <tbody id="results"></tbody>
+    </table></div>
   </section>
 
   <section class="card">
-    <div class="section-head">
-      <h2>Куски по квартирам</h2>
-    </div>
-    <div class="table-wrap">
-      <table>
-        <thead>
-          <tr>
-            <th>Квартира</th>
-            <th>Кол-во кусков</th>
-            <th>Диапазон маркировки</th>
-          </tr>
-        </thead>
-        <tbody id="apartmentPieces"></tbody>
-      </table>
-    </div>
+    <div class="section-head"><h2>Куски по квартирам</h2></div>
+    <div class="table-wrap"><table><thead><tr><th>Квартира</th><th>Кол-во кусков</th><th>Диапазон маркировки</th></tr></thead><tbody id="apartmentPieces"></tbody></table></div>
   </section>
 
   <section class="card">
-    <div class="section-head">
-      <h2>Сводка для заказа</h2>
-      <div class="actions">
-        <button id="downloadCsv" class="secondary">Скачать Excel (.xlsx)</button>
-        <button id="exportSheets" class="primary">Выгрузить в Google таблицы</button>
-      </div>
-    </div>
-    <div class="table-wrap">
-      <table>
-        <thead>
-          <tr>
-            <th>Ширина рулона</th>
-            <th>Погонный метраж</th>
-            <th>Площадь</th>
-            <th>Помещений</th>
-            <th>Маркировки</th>
-          </tr>
-        </thead>
-        <tbody id="summary"></tbody>
-      </table>
-    </div>
-    <p id="message" class="message"></p>
+    <div class="section-head"><h2>Сводка для заказа</h2><div class="actions"><button id="downloadXlsx" class="secondary">Скачать Excel (.xlsx)</button></div></div>
+    <div class="table-wrap"><table><thead><tr><th>Ширина рулона</th><th>Погонный метраж</th><th>Площадь</th><th>Квартиры</th><th>Маркировки для отрезки</th></tr></thead><tbody id="summary"></tbody></table></div>
   </section>
 </main>
 
 <template id="apartmentTpl">
   <article class="apartment">
-    <div class="apt-head">
-      <div class="apt-fields">
-        <label>№ квартиры<input class="apt-number" placeholder="01"></label>
-        <label>Название<input class="apt-name" placeholder="КВ01"></label>
-        <label class="apt-comment-field">Комментарий<input class="apt-comment" placeholder="Необязательно"></label>
-      </div>
-      <div class="actions apt-actions">
-        <button class="copy-apt secondary">Копировать</button>
-        <button class="delete-apt danger">Удалить</button>
-      </div>
+    <div class="apt-fields">
+      <label><span>№ квартиры</span><input class="apt-number" placeholder="Например, 139"></label>
+      <label><span>Название</span><input class="apt-name" placeholder="Например, КВ139"></label>
+      <label><span>Комментарий</span><input class="apt-comment" placeholder="Подъезд / этаж"></label>
     </div>
-    <div class="rooms-head">
-      <span>Помещение</span>
-      <span>Длина</span>
-      <span>Ширина</span>
-      <span>Комментарий</span>
-      <span></span>
-    </div>
+    <div class="actions"><button class="copy-apt secondary">Копировать</button><button class="delete-apt danger">Удалить квартиру</button></div>
+    <div class="rooms-head"><span>Помещение</span><span>Длина</span><span>Ширина</span><span>Запас, см</span><span>Комментарий</span><span></span></div>
     <div class="rooms"></div>
     <button class="add-room secondary">+ Добавить помещение</button>
   </article>
@@ -173,21 +78,15 @@
 
 <template id="roomTpl">
   <div class="room">
-    <div class="room-main">
-      <select class="room-type"></select>
-      <input class="room-custom" placeholder="Своё название" hidden>
-      <input class="room-code" placeholder="Код" hidden>
-    </div>
-    <label class="room-dim"><span class="mobile-label">Длина</span><input class="room-length" inputmode="decimal" placeholder="4,20"></label>
-    <label class="room-dim"><span class="mobile-label">Ширина</span><input class="room-width" inputmode="decimal" placeholder="3,35"></label>
-    <input class="room-comment" placeholder="Комментарий">
-    <div class="room-actions">
-      <button class="copy-room secondary">Копировать</button>
-      <button class="delete-room danger">×</button>
-    </div>
+    <label><span class="mobile-label">Помещение</span><select class="room-type"><option value="гостиная">гостиная</option><option value="спальня">спальня</option><option value="кухня">кухня</option><option value="коридор">коридор</option><option value="ванная">ванная</option><option value="балкон/лоджия">балкон/лоджия</option><option value="другое">другое</option></select></label>
+    <label><span class="mobile-label">Длина</span><input class="room-length" type="number" min="0" step="0.001" placeholder="0"></label>
+    <label><span class="mobile-label">Ширина</span><input class="room-width" type="number" min="0" step="0.001" placeholder="0"></label>
+    <label><span class="mobile-label">Запас, см</span><input class="room-allowance" type="number" min="0" step="0.5" placeholder="По умолчанию"></label>
+    <label><span class="mobile-label">Комментарий</span><input class="room-comment" placeholder="Дверь, ниша, балкон"></label>
+    <div class="actions room-actions"><button class="copy-room secondary">Копировать</button><button class="delete-room danger">×</button></div>
   </div>
 </template>
 
-<script src="app.js?v=20260807-rebuild"></script>
+<script src="app.js"></script>
 </body>
 </html>
