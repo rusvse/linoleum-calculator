@@ -233,7 +233,7 @@
           <td>${roomSizeText}</td>
           <td>${withAllowanceText}</td>
           <td>${rollWidthText}</td>
-          <td>${rollWidthText}</td>
+          <td>${calc.multiStrip || 1}</td>
           <td>${cutLengthText}</td>
           <td>${areaText}</td>
           <td>${wasteText}</td>
