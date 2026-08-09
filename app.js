@@ -21,7 +21,7 @@
   const fmt = n => Number.isFinite(n) ? (Math.round(n * 100) / 100).toLocaleString('ru-RU') : '—';
   const fmtMoney = n =>
     Number.isFinite(n)
-      ? Math.round(n * 100).toLocaleString('ru-RU', {
+      ? (Math.round(n * 100) / 100).toLocaleString('ru-RU', {
           style: 'currency',
           currency: 'RUB',
           minimumFractionDigits: 2
