@@ -540,24 +540,33 @@
 
     // Лист 1: Результаты
     const wsResults = wb.addWorksheet('Результаты', { views: [{ state: 'frozen', ySplit: 1 }] });
-    const resultsHeader = ['Маркировка','Квартира','Помещение','Длина','Ширина','С запасом','Ширина рулона','Метраж','Площадь','Остаток','Стыков','Комментарий'];
+    const resultsHeader = ['Маркировка','Квартира','Помещение','Длина','Ширина','С запасом','Ширина рулона','Полос','Метраж','Площадь','Остаток','% остатка','Статус остатка','Стыков','Комментарий'];
     wsResults.addRow(resultsHeader);
     styleHeaderRow(wsResults.getRow(1));
 
     let totalArea = 0, totalWaste = 0, totalLength = 0;
     const bandColors = ['FFFFFFFF', 'FFEDF0F1'];
     (last.resultsSheetRowsRaw || []).forEach(r => {
+      const wastePercent = (r.area + r.waste) > 0 ? Math.round((r.waste / (r.area + r.waste)) * 1000) / 10 : 0;
+      const wasteStatus = wastePercent <= 10 ? 'Норма' : (wastePercent <= 20 ? 'Внимание' : 'Большой остаток');
       const row = wsResults.addRow([
         r.marking, r.apartment, r.room, toDisplayLen(r.lengthM), toDisplayLen(r.widthM), r.withAllowanceText,
-        toDisplayLen(r.rollWidthM), toDisplayLen(r.cutLengthM), r.area, r.waste, r.seams, r.comment
+        toDisplayLen(r.rollWidthM), r.multiStrip, toDisplayLen(r.cutLengthM), r.area, r.waste, wastePercent / 100, wasteStatus, r.seams, r.comment
       ]);
       row.getCell(4).numFmt = lenNumFmt;
       row.getCell(5).numFmt = lenNumFmt;
       row.getCell(7).numFmt = lenNumFmt;
-      row.getCell(8).numFmt = lenNumFmt;
-      row.getCell(9).numFmt = areaNumFmt;
+      row.getCell(9).numFmt = lenNumFmt;
       row.getCell(10).numFmt = areaNumFmt;
-      row.getCell(12).alignment = { wrapText: true };
+      row.getCell(11).numFmt = areaNumFmt;
+      row.getCell(12).numFmt = '0.0%';
+      row.getCell(15).alignment = { wrapText: true };
+
+      const statusColors = { 'Норма': 'FFC6EFCE', 'Внимание': 'FFFFEB9C', 'Большой остаток': 'FFFFC7CE' };
+      const statusFontColors = { 'Норма': 'FF006100', 'Внимание': 'FF9C6500', 'Большой остаток': 'FF9C0006' };
+      row.getCell(12).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: statusColors[wasteStatus] } };
+      row.getCell(13).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: statusColors[wasteStatus] } };
+      row.getCell(13).font = { color: { argb: statusFontColors[wasteStatus] }, bold: true };
 
       const bandColor = bandColors[r.aptIndex % 2];
       row.eachCell({ includeEmpty: true }, cell => {
@@ -571,24 +580,16 @@
 
     const lastDataRow = wsResults.rowCount;
     if (lastDataRow > 1) {
-      const totalRow = wsResults.addRow(['', '', '', '', '', '', 'ИТОГО:', totalLength, totalArea, totalWaste, '', '']);
+      const totalRow = wsResults.addRow(['', '', '', '', '', '', '', '', totalLength, totalArea, totalWaste, '', '', '', '']);
+      totalRow.getCell(1).value = '';
+      totalRow.getCell(7).value = 'ИТОГО:';
       totalRow.eachCell(cell => { cell.font = { bold: true }; cell.border = { top: { style: 'double' } }; });
-      totalRow.getCell(8).numFmt = lenNumFmt;
-      totalRow.getCell(9).numFmt = areaNumFmt;
+      totalRow.getCell(9).numFmt = lenNumFmt;
       totalRow.getCell(10).numFmt = areaNumFmt;
-
-      // Условное форматирование: колонка "Остаток" (10) — цветовая шкала зелёный→жёлтый→красный
-      wsResults.addConditionalFormatting({
-        ref: `J2:J${lastDataRow}`,
-        rules: [{
-          type: 'colorScale',
-          cfvo: [{ type: 'min' }, { type: 'percentile', val: 50 }, { type: 'max' }],
-          color: [{ argb: 'FF63BE7B' }, { argb: 'FFFFEB84' }, { argb: 'FFF8696B' }]
-        }]
-      });
+      totalRow.getCell(11).numFmt = areaNumFmt;
     }
     autoWidth(wsResults, resultsHeader.length);
-    wsResults.getColumn(12).width = 40;
+    wsResults.getColumn(15).width = 40;
 
     // Лист 2: Куски по квартирам
     const wsPieces = wb.addWorksheet('Куски по квартирам', { views: [{ state: 'frozen', ySplit: 1 }] });
