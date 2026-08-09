@@ -131,7 +131,11 @@
         const rawLength = parseNum(r.querySelector('.room-length').value);
         const rawWidth = parseNum(r.querySelector('.room-width').value);
         const roomComment = r.querySelector('.room-comment').value.trim();
-        if (!Number.isFinite(rawLength) || !Number.isFinite(rawWidth)) return;
+        if (!Number.isFinite(rawLength) ||
+            !Number.isFinite(rawWidth) ||
+            rawLength <= 0 ||
+            rawWidth <= 0
+           ) return;
         rooms.push({
           typeName: roomTypeName(typeSelect, customInput),
           code: codeInput.value.trim(),
