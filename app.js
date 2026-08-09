@@ -562,7 +562,7 @@
 
       totalArea += r.area;
       totalWaste += r.waste;
-      totalLength += toDisplayLen(r.cutLengthM);
+      totalLength += toDisplayLen(r.cutLengthM * r.multiStrip);
     });
 
     const lastDataRow = wsResults.rowCount;
