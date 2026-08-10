@@ -81,6 +81,11 @@ code{background:#f4f6f8;padding:2px 6px;border-radius:4px;font-size:13px;}
 .cost-grid .cost-waste{color:#b45309;}
 @media (max-width:760px){.cost-grid{grid-template-columns:repeat(2,minmax(130px,1fr));}}
 
+.optimization-recommendations{margin-top:14px;}
+.combo-list{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:8px;}
+.combo-list li{font-size:13px;color:#374955;line-height:1.5;}
+.combo-empty{margin:0;color:var(--muted);font-size:13px;}
+
 @media (max-width:1200px){
 .grid.settings{grid-template-columns:repeat(3,minmax(0,1fr));}
 .apt-fields{grid-template-columns:minmax(90px,.7fr) minmax(120px,1fr) minmax(140px,1.4fr);}

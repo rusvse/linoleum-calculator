@@ -171,7 +171,7 @@
             const usedArea = rw * cutLength;
             const waste = usedArea - area;
             const seams = 0;
-            const candidate = { rollWidth: rw, cutLength, usedArea, waste, seams, withAllowance: true };
+            const candidate = { rollWidth: rw, cutLength, usedArea, waste, seams, withAllowance: true, requiredWidth: acrossRoll };
             if (!best) { best = candidate; return; }
             if (mode === 'waste') {
               if (candidate.waste < best.waste) best = candidate;
@@ -191,7 +191,7 @@
       const cutLength = alongRoll;
       const usedArea = stripWidth * cutLength * stripsAcross;
       const waste = usedArea - area;
-      best = { rollWidth: stripWidth, cutLength, usedArea, waste, seams: Math.max(0, stripsAcross - 1), withAllowance: true, multiStrip: stripsAcross };
+      best = { rollWidth: stripWidth, cutLength, usedArea, waste, seams: Math.max(0, stripsAcross - 1), withAllowance: true, multiStrip: stripsAcross, requiredWidth: stripWidth };
     }
     return { area, ...best };
   }
@@ -296,6 +296,7 @@
           lengthM: room.length, widthM: room.width,
           withAllowanceText,
           rollWidthM: calc.rollWidth, cutLengthM: calc.cutLength,
+          requiredWidthM: calc.requiredWidth,
           multiStrip: calc.multiStrip || 1,
           area: Math.round(calc.usedArea * 100) / 100,
           waste: Math.round(calc.waste * 100) / 100,
@@ -393,11 +394,166 @@
       }
     }
 
+    renderCuttingOptimization(resultsSheetRowsRaw, settings, units);
+
     window.__linumLastCalc = {
       apartments, settings, summaryMap, rows: flatRows, apartmentPieces,
       resultsSheetRows, resultsSheetRowsRaw, cuttingRows, summaryRowsArr, apartmentPiecesRowsArr,
       summaryMapRaw: summaryMap, totalMaterialCost, totalWasteCost
     };
+  }
+
+  function packBins(items, rollWidth, utilizationThreshold) {
+    const sorted = items.slice().sort((a, b) => (b.cutLength - a.cutLength) || (b.requiredWidth - a.requiredWidth));
+    const bins = [];
+    sorted.forEach(item => {
+      let placed = false;
+      for (const bin of bins) {
+        if (bin.usedWidth + item.requiredWidth <= rollWidth + 1e-9) {
+          bin.items.push(item);
+          bin.usedWidth += item.requiredWidth;
+          placed = true;
+          break;
+        }
+      }
+      if (!placed) {
+        bins.push({ items: [item], usedWidth: item.requiredWidth, length: item.cutLength });
+      }
+    });
+    if (!utilizationThreshold) return bins;
+    const finalBins = [];
+    bins.forEach(bin => {
+      const utilization = bin.usedWidth / rollWidth;
+      if (bin.items.length > 1 && utilization >= utilizationThreshold) {
+        finalBins.push(bin);
+      } else {
+        bin.items.forEach(it => finalBins.push({ items: [it], usedWidth: it.requiredWidth, length: it.cutLength }));
+      }
+    });
+    return finalBins;
+  }
+
+  function noCombineBins(items) {
+    return items.map(item => ({ items: [item], usedWidth: item.requiredWidth, length: item.cutLength }));
+  }
+
+  function summarizeBins(bins, rollWidth) {
+    let totalLength = 0, totalArea = 0, totalRealArea = 0, combosCount = 0;
+    bins.forEach(bin => {
+      totalLength += bin.length;
+      totalArea += bin.length * rollWidth;
+      bin.items.forEach(it => { totalRealArea += it.realArea; });
+      if (bin.items.length > 1) combosCount += 1;
+    });
+    return { totalLength, totalArea, totalRealArea, waste: totalArea - totalRealArea, combosCount, bins };
+  }
+
+  function computeCuttingOptimization(rowsRaw, settings) {
+    const buckets = new Map();
+    const passThrough = { totalLength: 0, totalArea: 0, totalRealArea: 0, waste: 0 };
+
+    rowsRaw.forEach(r => {
+      const realArea = r.area - r.waste;
+      if (r.multiStrip && r.multiStrip > 1) {
+        passThrough.totalLength += r.cutLengthM * r.multiStrip;
+        passThrough.totalArea += r.area;
+        passThrough.totalRealArea += realArea;
+        passThrough.waste += r.waste;
+        return;
+      }
+      const key = r.rollWidthM;
+      if (!buckets.has(key)) buckets.set(key, []);
+      buckets.get(key).push({
+        marking: r.marking, apartment: r.apartment, room: r.room,
+        cutLength: r.cutLengthM, requiredWidth: r.requiredWidthM, realArea
+      });
+    });
+
+    const modes = [
+      { key: 'savings', label: 'Экономный', threshold: 0 },
+      { key: 'none', label: 'Без стыков', threshold: null },
+      { key: 'balanced', label: 'Сбалансированный', threshold: 0.65 }
+    ];
+
+    const results = modes.map(mode => ({
+      key: mode.key, label: mode.label,
+      totalLength: passThrough.totalLength, totalArea: passThrough.totalArea,
+      totalRealArea: passThrough.totalRealArea, waste: passThrough.waste,
+      combosCount: 0, combos: []
+    }));
+
+    buckets.forEach((items, rollWidth) => {
+      modes.forEach((mode, idx) => {
+        const bins = mode.key === 'none' ? noCombineBins(items) : packBins(items, rollWidth, mode.threshold || 0);
+        const s = summarizeBins(bins, rollWidth);
+        results[idx].totalLength += s.totalLength;
+        results[idx].totalArea += s.totalArea;
+        results[idx].totalRealArea += s.totalRealArea;
+        results[idx].waste += s.waste;
+        results[idx].combosCount += s.combosCount;
+        bins.filter(b => b.items.length > 1).forEach(b => {
+          results[idx].combos.push({ rollWidth, length: b.length, items: b.items });
+        });
+      });
+    });
+
+    results.forEach(r => {
+      r.wastePercent = r.totalRealArea > 0 ? (r.waste / r.totalRealArea) * 100 : 0;
+      if (settings.materialPrice > 0) {
+        r.cost = settings.priceUnit === 'm2'
+          ? r.totalArea * settings.materialPrice
+          : r.totalLength * settings.materialPrice;
+      } else {
+        r.cost = null;
+      }
+    });
+
+    return results;
+  }
+
+  function renderCuttingOptimization(rowsRaw, settings, units) {
+    const tbody = el('optimizationTable');
+    const recBox = el('optimizationRecommendations');
+    if (!tbody) return;
+    tbody.innerHTML = '';
+    if (recBox) recBox.innerHTML = '';
+
+    if (!rowsRaw.length) return;
+
+    const results = computeCuttingOptimization(rowsRaw, settings);
+
+    results.forEach(r => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${r.label}</td>
+        <td>${fmtLen(r.totalLength, units)}</td>
+        <td>${fmt(r.totalArea)} м²</td>
+        <td>${fmt(r.waste)} м² (${fmt(r.wastePercent)}%)</td>
+        <td>${r.combosCount}</td>
+        <td>${r.cost !== null ? fmtMoney(r.cost) : '—'}</td>
+      `;
+      tbody.appendChild(tr);
+    });
+
+    if (recBox) {
+      const savings = results.find(r => r.key === 'savings');
+      if (savings && savings.combos.length) {
+        const list = document.createElement('ul');
+        list.className = 'combo-list';
+        savings.combos.forEach(combo => {
+          const names = combo.items.map(it => `${it.marking} (${it.apartment}, ${it.room})`).join(' + ');
+          const li = document.createElement('li');
+          li.textContent = `Объединить: ${names} — рулон ${fmtLen(combo.rollWidth, units)}, отрез ${fmtLen(combo.length, units)}.`;
+          list.appendChild(li);
+        });
+        recBox.appendChild(list);
+      } else {
+        const p = document.createElement('p');
+        p.className = 'combo-empty';
+        p.textContent = 'Подходящих объединений не найдено — все помещения уже используют ширину рулона эффективно.';
+        recBox.appendChild(p);
+      }
+    }
   }
 
   function readSettings() {
@@ -473,6 +629,8 @@
     el('results').innerHTML = '';
     el('summary').innerHTML = '';
     if (el('apartmentPieces')) el('apartmentPieces').innerHTML = '';
+    if (el('optimizationTable')) el('optimizationTable').innerHTML = '';
+    if (el('optimizationRecommendations')) el('optimizationRecommendations').innerHTML = '';
     ['filterApartment','filterRoom','filterWidth'].forEach(id => {
       el(id).innerHTML = '<option value="">Все</option>';
     });
@@ -832,7 +990,7 @@
       const data = await resp.json();
       if (!data.ok) { showMessage('Не удалось загрузить расчёт: ' + (data.error || ''), true); return; }
       loadProjectFromData({ settings: data.settings, apartments: data.apartments });
-      showMessage('загружен расчёт от ' + new Date(data.dateISO).toLocaleString('ru-RU') + '. Отредактируйте и нажмите «Выгрузить в Google таблицы», чтобы сохранить как новую версию.', false);
+      showMessage('Загружен расчёт от ' + new Date(data.dateISO).toLocaleString('ru-RU') + '. Отредактируйте и нажмите «Выгрузить в Google таблицы», чтобы сохранить как новую версию.', false);
       autosaveNow();
     } catch (err) {
       showMessage('Ошибка связи с архивом.', true);

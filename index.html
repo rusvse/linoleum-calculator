@@ -62,7 +62,7 @@
       <select id="archiveSelect"><option value="">Архив не загружен</option></select>
       <button id="loadArchive" class="primary">Загрузить выбранный расчёт</button>
     </div>
-    <small>Сохранённые рассчёты хранятся в Google таблице после нажатия «Выгрузить в Google таблицы» в конце страницы. Выберите дату из списка, чтобы вернуть старый рассчёт для редактирования.</small>
+    <small>Сохранённые расчёты хранятся в Google таблице после нажатия «Выгрузить в Google таблицы» в конце страницы. Выберите дату из списка, чтобы вернуть старый расчёт для редактирования.</small>
   </section>
 
   <section class="card">
@@ -108,6 +108,29 @@
       </table>
     </div>
     <div id="costSummary" class="cost-summary" hidden></div>
+  </section>
+
+  <section class="card">
+    <div class="section-head">
+      <h2>Оптимизация раскроя</h2>
+    </div>
+    <p class="settings-hint">Сравнение вариантов совместного раскроя всего заказа: разные помещения объединяются на одном отрезе рулона, чтобы уменьшить общий закупаемый метраж.</p>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Режим</th>
+            <th>Погонный метраж</th>
+            <th>Площадь</th>
+            <th>Остаток</th>
+            <th>Объединений</th>
+            <th>Стоимость</th>
+          </tr>
+        </thead>
+        <tbody id="optimizationTable"></tbody>
+      </table>
+    </div>
+    <div id="optimizationRecommendations" class="optimization-recommendations"></div>
   </section>
 
   <section class="card">
@@ -159,7 +182,7 @@
     <div class="apt-head">
       <div class="apt-fields">
         <label>№ квартиры<input class="apt-number" placeholder="01"></label>
-        <label>Название<input class="apt-name" placeholder="КВ02В01"></label>
+        <label>Название<input class="apt-name" placeholder="КВ01"></label>
         <label class="apt-comment-field">Комментарий<input class="apt-comment" placeholder="Необязательно"></label>
       </div>
       <div class="actions apt-actions">
@@ -196,6 +219,6 @@
   </div>
 </template>
 
-<script src="app.js?v=20260809-price"></script>
+<script src="app.js?v=20260810-optimize"></script>
 </body>
 </html>
